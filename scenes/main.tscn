@@ -1,3 +1,76 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://dm2moovgew5ti"]
 
-[node name="Main" type="Node3D"]
+[ext_resource type="Script" uid="uid://lsfq7xktvo0t" path="res://scripts/characters/player.gd" id="1_0wfyh"]
+[ext_resource type="PackedScene" path="res://assets/models/herts_cossack_reference/character.tscn" id="2_0wfyh"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_jyhfs"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tbgi4"]
+albedo_color = Color(0.4, 0.58, 0.34, 1)
+roughness = 0.95
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_tefeu"]
+material = SubResource("StandardMaterial3D_tbgi4")
+size = Vector2(100, 100)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_o6xl0"]
+size = Vector3(100, 1, 100)
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_tipki"]
+sky_top_color = Color(0.22, 0.42, 0.78, 1)
+sky_horizon_color = Color(0.66, 0.76, 0.88, 1)
+ground_horizon_color = Color(0.66, 0.76, 0.88, 1)
+
+[sub_resource type="Sky" id="Sky_85g3d"]
+sky_material = SubResource("ProceduralSkyMaterial_tipki")
+
+[sub_resource type="Environment" id="Environment_choun"]
+background_mode = 2
+sky = SubResource("Sky_85g3d")
+ambient_light_source = 3
+
+[node name="Main" type="Node3D" unique_id=267724020]
+
+[node name="Player" type="CharacterBody3D" parent="." unique_id=1490605642]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0)
+collision_layer = 2
+script = ExtResource("1_0wfyh")
+character_manifest_path = "res://assets/models/herts_cossack_reference/character.json"
+relax_idle_right_arm = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=2039648324]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_jyhfs")
+
+[node name="CharacterRotationRoot" type="Node3D" parent="Player" unique_id=302012403]
+
+[node name="Character" parent="Player/CharacterRotationRoot" unique_id=145045063 instance=ExtResource("2_0wfyh")]
+
+[node name="CameraYaw" type="Node3D" parent="Player" unique_id=567024305]
+
+[node name="CameraPitch" type="Node3D" parent="Player/CameraYaw" unique_id=1659713142]
+
+[node name="SpringArm3D" type="SpringArm3D" parent="Player/CameraYaw/CameraPitch" unique_id=2072108549]
+spring_length = 2.9
+
+[node name="Camera3D" type="Camera3D" parent="Player/CameraYaw/CameraPitch/SpringArm3D" unique_id=2053573022]
+current = true
+fov = 60.0
+
+[node name="TestGround" type="StaticBody3D" parent="." unique_id=1156891897]
+
+[node name="Mesh" type="MeshInstance3D" parent="TestGround" unique_id=1511335768]
+mesh = SubResource("PlaneMesh_tefeu")
+
+[node name="Collision" type="CollisionShape3D" parent="TestGround" unique_id=678336011]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+shape = SubResource("BoxShape3D_o6xl0")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1916569877]
+transform = Transform3D(0.8660254, 0.40957603, -0.28678823, 0, 0.57357645, 0.81915206, 0.5, -0.7094065, 0.49673176, 0, 0, 0)
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1738822275]
+environment = SubResource("Environment_choun")

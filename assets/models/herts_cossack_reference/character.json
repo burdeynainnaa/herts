@@ -1,0 +1,124 @@
+{
+  "id": "character-e7899e33-0e90-4ef8-ad4b-296d39d5957d",
+  "rig": {
+    "path": "res://assets/models/herts_cossack_reference/rig.glb",
+    "assetId": "e7899e33-0e90-4ef8-ad4b-296d39d5957d",
+    "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1795558798/summer_3d/character_e7899e33-0e90-4ef8-ad4b-296d39d5957d_runtime_1795558797327_89dfc3tz.glb",
+    "sourceFileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1795558788/summer_3d/rig_image-to-3d-6x2591-animation-batch_1795558786851_202egk2h.glb",
+    "artifactFingerprint": "publicId:summer_3d/character_e7899e33-0e90-4ef8-ad4b-296d39d5957d_runtime_1795558797327_89dfc3tz.glb"
+  },
+  "status": "ready",
+  "version": 2,
+  "provider": {
+    "mode": "managed",
+    "name": "fal",
+    "rigTaskId": "01a20fa3-5ce7-7753-a01d-576aeb84fe76"
+  },
+  "animations": [
+    {
+      "id": "animation-e7899e33-0e90-4ef8-ad4b-296d39d5957d-11",
+      "loop": true,
+      "name": "Idle",
+      "path": "res://assets/models/herts_cossack_reference/rig.glb",
+      "assetId": "55e28aaa-875b-4156-bc5b-4d5751abe7bc",
+      "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1795558793/summer_animations/animation_image-to-3d-6x2591-11_1795558791756_pgbisz2a.glb",
+      "actionId": 11,
+      "description": "Idle animation for Herts Zaporozhian Cossack.",
+      "semanticRole": "idle",
+      "artifactFingerprint": "assetId:55e28aaa-875b-4156-bc5b-4d5751abe7bc"
+    },
+    {
+      "id": "animation-e7899e33-0e90-4ef8-ad4b-296d39d5957d-1",
+      "loop": true,
+      "name": "Walk",
+      "path": "res://assets/models/herts_cossack_reference/rig.glb",
+      "assetId": "cde3ecf5-d18c-4757-a3c8-6740227da50d",
+      "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1795558792/summer_animations/animation_image-to-3d-6x2591-1_1795558791709_76jjcxov.glb",
+      "actionId": 1,
+      "description": "Walk animation for Herts Zaporozhian Cossack.",
+      "semanticRole": "walk",
+      "artifactFingerprint": "assetId:cde3ecf5-d18c-4757-a3c8-6740227da50d"
+    },
+    {
+      "id": "animation-e7899e33-0e90-4ef8-ad4b-296d39d5957d-15",
+      "loop": true,
+      "name": "Run",
+      "path": "res://assets/models/herts_cossack_reference/rig.glb",
+      "assetId": "4920e7c9-4fc8-416a-a37e-37ee59fe80cc",
+      "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1795558792/summer_animations/animation_image-to-3d-6x2591-15_1795558791743_hqdsmrag.glb",
+      "actionId": 15,
+      "description": "Run animation for Herts Zaporozhian Cossack.",
+      "semanticRole": "run",
+      "artifactFingerprint": "assetId:4920e7c9-4fc8-416a-a37e-37ee59fe80cc"
+    },
+    {
+      "id": "animation-e7899e33-0e90-4ef8-ad4b-296d39d5957d-13",
+      "loop": false,
+      "name": "Jump",
+      "path": "res://assets/models/herts_cossack_reference/rig.glb",
+      "assetId": "e6df027c-a8a9-4ee3-b3a5-cb333ed73c5c",
+      "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1795558792/summer_animations/animation_image-to-3d-6x2591-13_1795558791612_8wq08c9s.glb",
+      "actionId": 13,
+      "description": "Jump animation for Herts Zaporozhian Cossack.",
+      "semanticRole": "jump",
+      "artifactFingerprint": "assetId:e6df027c-a8a9-4ee3-b3a5-cb333ed73c5c"
+    }
+  ],
+  "characterId": "e7899e33-0e90-4ef8-ad4b-296d39d5957d",
+  "displayName": "Herts Zaporozhian Cossack",
+  "forwardAxis": "-Z",
+  "directoryName": "herts_zaporozhian_cossack_e7899e33",
+  "runtimeBundle": {
+    "clips": [
+      "Idle",
+      "Walk",
+      "Run",
+      "Jump"
+    ],
+    "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1795558798/summer_3d/character_e7899e33-0e90-4ef8-ad4b-296d39d5957d_runtime_1795558797327_89dfc3tz.glb",
+    "publicId": "summer_3d/character_e7899e33-0e90-4ef8-ad4b-296d39d5957d_runtime_1795558797327_89dfc3tz.glb",
+    "validation": {
+      "ok": true,
+      "clips": [
+        {
+          "name": "Idle",
+          "channels": 66,
+          "duration": 1.9
+        },
+        {
+          "name": "Walk",
+          "channels": 66,
+          "duration": 1
+        },
+        {
+          "name": "Run",
+          "channels": 66,
+          "duration": 0.833
+        },
+        {
+          "name": "Jump",
+          "channels": 66,
+          "duration": 2.067
+        }
+      ],
+      "errors": [],
+      "sizeBytes": 10500948
+    },
+    "skeletonFingerprint": "14ftpp8"
+  },
+  "rootYawRadians": 3.141592653589793,
+  "unriggedSource": {
+    "assetId": "e7899e33-0e90-4ef8-ad4b-296d39d5957d",
+    "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1795558594/summer_3d/3d_e7899e330e904ef8ad4b296d_1795558593331.glb"
+  },
+  "scaleMultiplier": 1,
+  "sourceForwardAxis": "+Z",
+  "groundOffsetMeters": 0,
+  "targetHeightMeters": 1.8,
+  "skeletonFingerprint": "14ftpp8",
+  "packageRevision": "sha256:fb2ea3f67fe8464b77b7171472455544b7e8ac17bb3f2c9a7d3e09a9d177e372",
+  "normalization": {
+    "targetHeightMeters": 1.8,
+    "forwardAxis": "-Z"
+  }
+}
