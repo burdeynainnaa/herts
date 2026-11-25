@@ -8,9 +8,10 @@ game UI. The Summer board contains the current design and visual references.
 
 ## Current state
 
-The main scene has an animated Cossack, a third-person movement controller,
-and a simple temporary ground plane for testing. World building, combat, and UI
-come later. The original Summer starter scene remains at `main.tscn` as a reference.
+The main scene has an animated Cossack and a third-person movement controller.
+The first area starts on a rocky ridge above a poppy field, a winding river and
+a palisaded timber village at sunset. Combat and UI come later. The original
+Summer starter scene remains at `main.tscn` as a reference.
 
 ## Open and run
 

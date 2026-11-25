@@ -18,6 +18,7 @@ const REQUIRED_ACTIONS: Array[StringName] = [
 @export var floor_stick_velocity: float = 0.5
 @export var animation_blend_time: float = 0.25
 @export var relax_idle_right_arm: bool = false
+@export var character_tint: Color = Color.WHITE
 
 @export_category("Camera")
 @export var mouse_sensitivity: float = 0.002
@@ -55,6 +56,13 @@ var _idle_arm_modifier: SkeletonModifier3D
 func _ready() -> void:
 	if not _validate_scene_contract() or not _configure_character_animation():
 		return
+	var character_mesh := get_node_or_null("CharacterRotationRoot/Character/Visual/Armature/Skeleton3D/char1") as MeshInstance3D
+	if character_mesh != null and character_mesh.mesh != null:
+		var original_material := character_mesh.mesh.surface_get_material(0) as StandardMaterial3D
+		if original_material != null:
+			var tinted_material := original_material.duplicate() as StandardMaterial3D
+			tinted_material.albedo_color *= character_tint
+			character_mesh.set_surface_override_material(0, tinted_material)
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity"))
 	_spawn_position = global_position
 	floor_snap_length = floor_snap_distance

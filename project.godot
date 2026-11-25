@@ -61,10 +61,6 @@ sprint={
 
 3d/physics_engine="Jolt Physics"
 
-[rendering]
-
-rendering_device/driver.windows="d3d12"
-
 [summer]
 
 version="0.8.8"
