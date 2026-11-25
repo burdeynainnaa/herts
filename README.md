@@ -33,7 +33,9 @@ Jolt 3D physics.
 The character package ships a walk with a strong pelvis sway. `scripts/characters/stoic_walk.gd`
 rebuilds it into `assets/models/herts_cossack_reference/walk_stoic.tres`: the pelvis barely
 turns, the arms swing about half as far, and the shoulder girdle counter-rotates against the
-stride. `scripts/characters/player.gd` plays that clip as `WalkStoic` (see
+stride. The thighs are counter-posed against that quiet pelvis (rotation plus a small socket
+offset), so the legs keep the source stride exactly and the feet stop sliding sideways.
+`scripts/characters/player.gd` plays that clip as `WalkStoic` (see
 `walk_animation_override`). Edit the keep and gain constants in the baker and save the clip
 again to retune the gait.
 

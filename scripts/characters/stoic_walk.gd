@@ -10,6 +10,7 @@ const OUT_CLIP := &"WalkStoic"
 const HIP_BONE := &"Hips"
 const CHEST_BONE := &"Spine"
 const NECK_BONE := &"neck"
+const LEG_BONES: Array[StringName] = [&"LeftUpLeg", &"RightUpLeg"]
 
 ## Source motion each part keeps, 1.0 meaning untouched.
 ## Hips rotation as (pitch, yaw, roll); translation as (side sway, bob, fore-aft).
@@ -42,6 +43,15 @@ static func build(skeleton: Skeleton3D, source: Animation) -> Animation:
 	if hips_track >= 0:
 		hips_mean = _mean_rotation(out, hips_track)
 		hips_yaw = _sample_hips_yaw(out, hips_track, hips_mean)
+	_damp_tracks(out, skeleton, hips_yaw)
+	_freeze_leg_swing(out, source, skeleton)
+	out.loop_mode = Animation.LOOP_LINEAR
+	out.resource_name = OUT_CLIP
+	return out
+
+
+## Damps the pelvis, the torso and the arms in place, leaving leg tracks untouched.
+static func _damp_tracks(out: Animation, skeleton: Skeleton3D, hips_yaw: PackedFloat64Array) -> void:
 	var chest_up := _up_axis_local(skeleton, CHEST_BONE)
 	var neck_up := _up_axis_local(skeleton, NECK_BONE)
 	for track in out.get_track_count():
@@ -80,9 +90,87 @@ static func build(skeleton: Skeleton3D, source: Animation) -> Animation:
 						offset.z * HIP_TRANSLATION_KEEP.z
 					)
 					out.track_set_key_value(track, key, kept)
+
+
+## A quiet pelvis would drag the legs with it, so each thigh is counter-posed to keep
+## the source leg chain exactly where it was: the feet stay planted instead of sliding.
+static func _freeze_leg_swing(out: Animation, source: Animation, skeleton: Skeleton3D) -> void:
+	var hips_rotation_source := _find_rotation_track(source, HIP_BONE)
+	var hips_position_source := _find_position_track(source, HIP_BONE)
+	var hips_rotation_out := _find_rotation_track(out, HIP_BONE)
+	var hips_position_out := _find_position_track(out, HIP_BONE)
+	if hips_rotation_source < 0 or hips_rotation_out < 0:
+		return
+	var leg_rotations: Dictionary = {}
+	var leg_positions: Dictionary = {}
+	var leg_times: Dictionary = {}
+	for bone in LEG_BONES:
+		var rotation_track := _find_rotation_track(out, bone)
+		if rotation_track < 0:
+			continue
+		var socket := Vector3.ZERO
+		var socket_track := _find_position_track(source, bone)
+		if socket_track < 0:
+			var bone_index := skeleton.find_bone(bone)
+			socket = skeleton.get_bone_rest(bone_index).origin if bone_index >= 0 else Vector3.ZERO
+		var times := PackedFloat64Array()
+		var rotations: Array[Quaternion] = []
+		var positions: Array[Vector3] = []
+		for key in out.track_get_key_count(rotation_track):
+			var time := out.track_get_key_time(rotation_track, key)
+			var leg_socket := socket
+			if socket_track >= 0:
+				leg_socket = _sample_position(source, socket_track, time)
+			var leg := Transform3D(Basis(out.track_get_key_value(rotation_track, key) as Quaternion), leg_socket)
+			var source_pelvis := Transform3D(
+				Basis(_sample_rotation(source, hips_rotation_source, time)),
+				_sample_position(source, hips_position_source, time)
+			)
+			var damped_pelvis := Transform3D(
+				Basis(_sample_rotation(out, hips_rotation_out, time)),
+				_sample_position(out, hips_position_out, time)
+			)
+			var fixed := (damped_pelvis.affine_inverse() * source_pelvis) * leg
+			times.append(time)
+			rotations.append(fixed.basis.get_rotation_quaternion())
+			positions.append(fixed.origin)
+		for index in range(1, rotations.size()):
+			if rotations[index].dot(rotations[index - 1]) < 0.0:
+				var flipped := rotations[index]
+				rotations[index] = Quaternion(-flipped.x, -flipped.y, -flipped.z, -flipped.w)
+		leg_times[bone] = times
+		leg_rotations[bone] = rotations
+		leg_positions[bone] = positions
+	if leg_rotations.is_empty():
+		return
+	var stale: Array[int] = []
+	for bone in leg_positions:
+		var socket_track := _find_position_track(out, bone)
+		if socket_track >= 0:
+			stale.append(socket_track)
+	stale.sort()
+	stale.reverse()
+	for index in stale:
+		out.remove_track(index)
+	for bone in leg_rotations:
+		var rotation_track := _find_rotation_track(out, bone)
+		if rotation_track < 0:
+			continue
+		var path := out.track_get_path(rotation_track)
+		var rotations: Array = leg_rotations[bone]
+		for key in out.track_get_key_count(rotation_track):
+			out.track_set_key_value(rotation_track, key, rotations[key])
+		var times: PackedFloat64Array = leg_times[bone]
+		var positions: Array = leg_positions[bone]
+		var socket_track := out.add_track(Animation.TYPE_POSITION_3D)
+		out.track_set_path(socket_track, path)
+		out.track_set_interpolation_type(socket_track, Animation.INTERPOLATION_LINEAR)
+		out.track_set_interpolation_loop_wrap(socket_track, true)
+		for key in times.size():
+			out.track_insert_key(socket_track, times[key], positions[key])
 	out.loop_mode = Animation.LOOP_LINEAR
 	out.resource_name = OUT_CLIP
-	return out
+	return
 
 
 static func _rotation_keep(bone: StringName) -> float:
@@ -132,6 +220,38 @@ static func _find_rotation_track(animation: Animation, bone: StringName) -> int:
 		if animation.track_get_type(track) == Animation.TYPE_ROTATION_3D and _track_bone(animation, track) == bone:
 			return track
 	return -1
+
+
+static func _find_position_track(animation: Animation, bone: StringName) -> int:
+	for track in animation.get_track_count():
+		if animation.track_get_type(track) == Animation.TYPE_POSITION_3D and _track_bone(animation, track) == bone:
+			return track
+	return -1
+
+
+static func _sample_position(animation: Animation, track: int, time: float) -> Vector3:
+	if track < 0:
+		return Vector3.ZERO
+	var count := animation.track_get_key_count(track)
+	if count == 0:
+		return Vector3.ZERO
+	var first_time := animation.track_get_key_time(track, 0)
+	var last_time := animation.track_get_key_time(track, count - 1)
+	if time <= first_time:
+		return animation.track_get_key_value(track, 0)
+	if time >= last_time:
+		return animation.track_get_key_value(track, count - 1)
+	var next := 1
+	while next < count and animation.track_get_key_time(track, next) < time:
+		next += 1
+	var previous := next - 1
+	var start_time := animation.track_get_key_time(track, previous)
+	var end_time := animation.track_get_key_time(track, next)
+	var from: Vector3 = animation.track_get_key_value(track, previous)
+	var to: Vector3 = animation.track_get_key_value(track, next)
+	if is_equal_approx(start_time, end_time):
+		return from
+	return from.lerp(to, clampf((time - start_time) / (end_time - start_time), 0.0, 1.0))
 
 
 static func _mean_rotation(animation: Animation, track: int) -> Quaternion:
