@@ -9,8 +9,8 @@ const REQUIRED_ACTIONS: Array[StringName] = [
 @export_file("*.json") var character_manifest_path: String
 
 @export_category("Movement")
-@export var walk_speed: float = 4.0
-@export var run_speed: float = 7.0
+@export var walk_speed: float = 1.45
+@export var run_speed: float = 4.7
 @export var acceleration: float = 14.0
 @export var jump_velocity: float = 3.8
 @export var turn_speed: float = 12.0
@@ -19,6 +19,12 @@ const REQUIRED_ACTIONS: Array[StringName] = [
 @export var animation_blend_time: float = 0.25
 @export var relax_idle_right_arm: bool = false
 @export var character_tint: Color = Color.WHITE
+
+@export_category("Animation Sync")
+@export var walk_clip_ground_speed: float = 1.45
+@export var run_clip_ground_speed: float = 4.7
+@export var min_animation_speed: float = 0.6
+@export var max_animation_speed: float = 1.5
 
 @export_category("Camera")
 @export var mouse_sensitivity: float = 0.002
@@ -223,6 +229,21 @@ func _update_animation_state() -> void:
 	else:
 		next_role = &"walk"
 	_play_role(next_role)
+	_sync_animation_to_ground(horizontal_speed, next_role)
+
+
+func _sync_animation_to_ground(horizontal_speed: float, role: StringName) -> void:
+	var clip_ground_speed := 0.0
+	if role == &"walk":
+		clip_ground_speed = walk_clip_ground_speed
+	elif role == &"run":
+		clip_ground_speed = run_clip_ground_speed
+	if clip_ground_speed <= 0.001:
+		_animation_player.speed_scale = 1.0
+		return
+	_animation_player.speed_scale = clampf(
+		horizontal_speed / clip_ground_speed, min_animation_speed, max_animation_speed
+	)
 
 
 func _play_role(role: StringName) -> void:
