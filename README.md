@@ -19,7 +19,8 @@ Open this folder as a Summer Engine project and run the project with Play.
 The configured entry point is `scenes/main.tscn`. Use WASD to walk, hold Shift
 to run, Space to jump, and the mouse to look around. Press F near the horse to
 mount or dismount; use WASD to ride and hold Shift to gallop. Escape releases the mouse;
-click the game to capture it again. The project uses the Forward+ renderer and
+click the game to capture it again. Press M to open or close the world map; Escape
+also closes the map. The project uses the Forward+ renderer and
 Jolt 3D physics.
 
 ## Project layout

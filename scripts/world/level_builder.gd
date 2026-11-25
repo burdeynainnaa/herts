@@ -10,6 +10,24 @@ const WATER_LEVEL := 0.28
 const ISLAND_CENTER_Z := -69.0
 const ISLAND_HALF_LENGTH := 32.0
 const ISLAND_HALF_WIDTH := 10.0
+const ROAD_MAIN := [
+	Vector2(43.3, -155.0), Vector2(42.1, -146.8), Vector2(35.3, -115.9),
+	Vector2(30.3, -97.3), Vector2(23.3, -83.8), Vector2(14.7, -69.9),
+	Vector2(8.7, -61.4), Vector2(5.0, -55.4), Vector2(3.4, -47.4),
+	Vector2(4.3, -36.3), Vector2(7.6, -30.2), Vector2(14.0, -23.0),
+	Vector2(19.5, -19.1), Vector2(26.6, -16.1), Vector2(36.0, -14.5),
+	Vector2(45.3, -11.0), Vector2(55.5, -4.1), Vector2(61.3, 2.9),
+	Vector2(67.4, 12.3), Vector2(74.0, 24.0), Vector2(79.9, 34.4)
+]
+const ROAD_GATE := [Vector2(26.6, -16.1), Vector2(28.0, -20.5), Vector2(28.5, -25.8)]
+const STRONGHOLD_RISE_OUTLINE := [
+	Vector2(120.0, -70.0), Vector2(68.0, -70.0), Vector2(41.0, -69.0),
+	Vector2(24.0, -68.0), Vector2(17.0, -65.0), Vector2(12.0, -60.0),
+	Vector2(8.0, -49.0), Vector2(7.0, -39.0), Vector2(8.0, -35.0),
+	Vector2(14.0, -29.0), Vector2(26.0, -21.0), Vector2(34.0, -13.0),
+	Vector2(46.0, -2.0), Vector2(57.0, 11.5), Vector2(67.0, 22.0),
+	Vector2(76.0, 34.0), Vector2(90.0, 50.0), Vector2(120.0, 50.0)
+]
 
 static func river_center(z: float) -> float:
 	return -51.0 + 40.0 * (1.0 - smoothstep(-100.0, 15.0, z)) + 8.0 * sin(z * 0.055)
@@ -29,6 +47,24 @@ static func island_weight(x: float, z: float) -> float:
 	return 1.0 - smoothstep(0.78, 1.06, sqrt(along * along + across * across))
 
 
+static func stronghold_elevation(x: float, z: float) -> float:
+	if x < -3.0 or z < -80.0:
+		return 0.0
+	var point := Vector2(x, z)
+	var outline := PackedVector2Array(STRONGHOLD_RISE_OUTLINE)
+	var weight := 1.0
+	if not Geometry2D.is_point_in_polygon(point, outline):
+		var nearest := INF
+		for index in range(outline.size()):
+			var first := outline[index]
+			var edge := outline[(index + 1) % outline.size()] - first
+			var amount := clampf((point - first).dot(edge) / edge.length_squared(), 0.0, 1.0)
+			nearest = minf(nearest, point.distance_squared_to(first + edge * amount))
+		weight = 1.0 - smoothstep(0.0, 10.0, sqrt(nearest))
+	var bank_distance := absf(x - river_center(z)) - river_width(z)
+	return 1.8 * weight * smoothstep(1.0, 7.0, bank_distance)
+
+
 static func terrain_height(x: float, z: float) -> float:
 	var ridge := 7.0 * smoothstep(-20.0, 10.0, z)
 	var undulation := 0.25 * sin(x * 0.11 + z * 0.07) + 0.18 * cos(z * 0.19 - x * 0.08)
@@ -42,7 +78,7 @@ static func terrain_height(x: float, z: float) -> float:
 	height = lerpf(height, -0.85, channel)
 	var island_height := 0.86 + 0.09 * sin(x * 0.25 + z * 0.12)
 	height = lerpf(height, island_height, island_weight(x, z))
-	return height
+	return height + stronghold_elevation(x, z)
 
 
 static func terrain_surface_height(x: float, z: float) -> float:
@@ -59,6 +95,133 @@ static func terrain_surface_height(x: float, z: float) -> float:
 	if across + along <= 1.0:
 		return a + (b - a) * across + (c - a) * along
 	return d + (c - d) * (1.0 - across) + (b - d) * (1.0 - along)
+
+
+static func _distance_to_road(point: Vector2) -> float:
+	var closest := INF
+	for route in [ROAD_MAIN, ROAD_GATE]:
+		for index in range(route.size() - 1):
+			var first: Vector2 = route[index]
+			var second: Vector2 = route[index + 1]
+			var edge := second - first
+			var amount := clampf((point - first).dot(edge) / edge.length_squared(), 0.0, 1.0)
+			closest = minf(closest, point.distance_squared_to(first + edge * amount))
+	return sqrt(closest)
+
+
+static func _road_curve(points: Array) -> Curve2D:
+	var curve := Curve2D.new()
+	curve.bake_interval = 0.3
+	for index in range(points.size()):
+		var previous: Vector2 = points[maxi(index - 1, 0)]
+		var next: Vector2 = points[mini(index + 1, points.size() - 1)]
+		var tangent := (next - previous) * 0.18
+		curve.add_point(points[index], -tangent, tangent)
+	return curve
+
+
+static func _road_point(point: Vector2, lift: float) -> Vector3:
+	var x := clampf(point.x, WORLD_MIN_X, WORLD_MAX_X)
+	var z := clampf(point.y, WORLD_MIN_Z, WORLD_MAX_Z)
+	return Vector3(x, terrain_surface_height(x, z) + lift, z)
+
+
+static func _road_strip(surface: SurfaceTool, points: Array, width: float, lift: float) -> void:
+	var curve := _road_curve(points)
+	var length := curve.get_baked_length()
+	var count := ceili(length / 0.65)
+	var noise := FastNoiseLite.new()
+	noise.seed = 9182
+	noise.frequency = 0.16
+	noise.fractal_octaves = 3
+	var rows: Array = []
+	for index in range(count + 1):
+		var distance := length * index / count
+		var center := curve.sample_baked(distance)
+		var before := curve.sample_baked(maxf(0.0, distance - 0.25))
+		var after := curve.sample_baked(minf(length, distance + 0.25))
+		var direction := (after - before).normalized()
+		var side := Vector2(-direction.y, direction.x)
+		var row := []
+		var left_width := width * 0.5 * (1.0 + noise.get_noise_2d(distance, 15.0) * 0.27)
+		var right_width := width * 0.5 * (1.0 + noise.get_noise_2d(distance, 60.0) * 0.27)
+		for column in range(9):
+			var across := float(column) / 4.0 - 1.0
+			var offset := across * (left_width if across < 0.0 else right_width)
+			var point := center + side * offset
+			var variation := noise.get_noise_2d(point.x * 1.5, point.y * 1.5)
+			var earth := Color(0.36, 0.29, 0.20).lerp(Color(0.46, 0.37, 0.25), clampf(0.5 + variation * 0.65, 0.0, 1.0))
+			var edge_alpha := 1.0 - smoothstep(0.48, 1.0, absf(across))
+			earth.a = edge_alpha * clampf(0.88 + variation * 0.16, 0.7, 0.98)
+			row.append([_road_point(point, lift), earth])
+		rows.append(row)
+	for index in range(count):
+		for column in range(8):
+			for vertex in [rows[index][column], rows[index + 1][column], rows[index][column + 1], rows[index][column + 1], rows[index + 1][column], rows[index + 1][column + 1]]:
+				surface.set_color(vertex[1])
+				surface.add_vertex(vertex[0])
+
+
+static func _filter_road_multimesh(instance: MultiMeshInstance3D, clearance: float) -> bool:
+	var old := instance.multimesh
+	var retained: Array[int] = []
+	for index in range(old.instance_count):
+		var position := old.get_instance_transform(index).origin
+		if _distance_to_road(Vector2(position.x, position.z)) >= clearance:
+			retained.append(index)
+	if retained.size() == old.instance_count:
+		return false
+	var replacement := MultiMesh.new()
+	replacement.transform_format = old.transform_format
+	replacement.use_colors = old.use_colors
+	replacement.use_custom_data = old.use_custom_data
+	replacement.mesh = old.mesh
+	replacement.instance_count = retained.size()
+	for index in range(retained.size()):
+		var source := retained[index]
+		replacement.set_instance_transform(index, old.get_instance_transform(source))
+		if old.use_colors:
+			replacement.set_instance_color(index, old.get_instance_color(source))
+		if old.use_custom_data:
+			replacement.set_instance_custom_data(index, old.get_instance_custom_data(source))
+	instance.multimesh = replacement
+	return true
+
+
+static func build_road(root: Node3D) -> void:
+	var world := root.get_node("FirstLevel") as Node3D
+	var old_road := world.get_node_or_null("StrongholdRoad")
+	if old_road != null:
+		old_road.free()
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_road_strip(surface, ROAD_MAIN, 3.4, 0.055)
+	_road_strip(surface, ROAD_GATE, 3.0, 0.065)
+	surface.generate_normals()
+	var road := MeshInstance3D.new()
+	road.name = "StrongholdRoad"
+	road.mesh = surface.commit()
+	var trail_material := _material(Color.WHITE, true)
+	trail_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	road.mesh.surface_set_material(0, trail_material)
+	road.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_owned(world, road, root)
+	for node_name in ["TallGrass", "RedPoppies"]:
+		var instance := world.get_node_or_null(node_name) as MultiMeshInstance3D
+		if instance != null:
+			_filter_road_multimesh(instance, 1.8)
+	var rocks := world.get_node_or_null("RidgeAndFieldRocks") as MultiMeshInstance3D
+	if rocks != null and _filter_road_multimesh(rocks, 5.0):
+		add_rock_collision(world, root)
+	var trees := world.get_node_or_null("RiverbankAndDistantTreeline")
+	if trees != null:
+		for child in trees.get_children():
+			if child is MultiMeshInstance3D and child.name == "BroadleafForest":
+				_filter_road_multimesh(child, 5.5)
+			elif child is Node3D and (child.name.begins_with("Tree") or child.name.begins_with("Bush")):
+				var position: Vector3 = child.position
+				if _distance_to_road(Vector2(position.x, position.z)) < 5.5:
+					child.free()
 
 
 static func _owned(parent: Node, child: Node, root: Node) -> void:
@@ -562,6 +725,80 @@ static func _build_island_vegetation(parent: Node3D, root: Node) -> void:
 	_add_multimesh(parent, root, "IslandUnderstory", _grass_mesh(), grasses)
 
 
+static func _village_road(village: Node3D, root: Node) -> void:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for segment in range(15):
+		var near_z := -25.0 - segment * 2.0
+		var far_z := near_z - 2.0
+		var left := 26.6 + 0.25 * sin(segment * 0.6)
+		var right := 31.4 + 0.25 * sin(segment * 0.6)
+		var next_left := 26.6 + 0.25 * sin((segment + 1) * 0.6)
+		var next_right := 31.4 + 0.25 * sin((segment + 1) * 0.6)
+		var a := Vector3(left, terrain_surface_height(left, near_z) + 0.045, near_z)
+		var b := Vector3(right, terrain_surface_height(right, near_z) + 0.045, near_z)
+		var c := Vector3(next_left, terrain_surface_height(next_left, far_z) + 0.045, far_z)
+		var d := Vector3(next_right, terrain_surface_height(next_right, far_z) + 0.045, far_z)
+		var earth := Color(0.34, 0.27, 0.19).lightened(0.015 * (segment % 3))
+		_triangle(surface, a, b, c, earth)
+		_triangle(surface, b, d, c, earth)
+	var center := Vector3(29.0, terrain_surface_height(29.0, -43.0) + 0.055, -43.0)
+	for segment in range(16):
+		var angle := TAU * segment / 16.0
+		var next_angle := TAU * (segment + 1) / 16.0
+		var first := Vector2(29.0 + cos(angle) * 7.0, -43.0 + sin(angle) * 5.4)
+		var second := Vector2(29.0 + cos(next_angle) * 7.0, -43.0 + sin(next_angle) * 5.4)
+		_triangle(surface, center, Vector3(first.x, terrain_surface_height(first.x, first.y) + 0.055, first.y), Vector3(second.x, terrain_surface_height(second.x, second.y) + 0.055, second.y), Color(0.35, 0.28, 0.20).lightened(0.01 * (segment % 3)))
+	surface.generate_normals()
+	var road := MeshInstance3D.new()
+	road.name = "PackedEarthCourtyard"
+	road.mesh = surface.commit()
+	road.mesh.surface_set_material(0, _material(Color.WHITE, true))
+	_owned(village, road, root)
+
+
+static func _tower_log_wall() -> ArrayMesh:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var radius := 0.16
+	for row in range(16):
+		var height := radius + row * 0.31
+		for side in range(8):
+			var angle := TAU * side / 8.0
+			var next_angle := TAU * (side + 1) / 8.0
+			var first := Vector3(0, height + cos(angle) * radius, sin(angle) * radius)
+			var second := Vector3(0, height + cos(next_angle) * radius, sin(next_angle) * radius)
+			var left := Vector3(-1.78, 0, 0)
+			var right := Vector3(1.78, 0, 0)
+			var wood := Color(0.29, 0.19, 0.12).lightened(0.012 * (row % 4) + 0.008 * side)
+			_triangle(surface, left + first, right + first, left + second, wood)
+			_triangle(surface, right + first, right + second, left + second, wood)
+			_triangle(surface, left + Vector3(0, height, 0), left + second, left + first, wood.lightened(0.08))
+			_triangle(surface, right + Vector3(0, height, 0), right + first, right + second, wood.lightened(0.08))
+	surface.generate_normals()
+	var mesh := surface.commit()
+	mesh.surface_set_material(0, _material(Color.WHITE, true))
+	return mesh
+
+
+static func _tower_wall(village: Node3D, root: Node, mesh: Mesh, node_name: String, position: Vector3, yaw: float) -> void:
+	var wall := MeshInstance3D.new()
+	wall.name = node_name
+	wall.mesh = mesh
+	wall.position = position
+	wall.rotation.y = yaw
+	_owned(village, wall, root)
+
+
+static func _fort_tower(village: Node3D, root: Node, tower: PackedScene, log_wall: Mesh, node_name: String, center: Vector3) -> void:
+	_instance_model(village, root, tower, node_name, center)
+	for side in range(4):
+		var yaw := side * PI / 2.0
+		var outward := Vector3(sin(yaw), 0.0, cos(yaw)) * 1.72
+		_tower_wall(village, root, log_wall, "%sLogWall%d" % [node_name, side], center + outward, yaw)
+	_wall_collider(village, root, node_name + "Collision", center + Vector3(0, 2.5, 0), Vector3(3.4, 5.0, 3.4))
+
+
 static func _build_village(world: Node3D, root: Node) -> void:
 	var village := Node3D.new()
 	village.name = "PalisadeVillage"
@@ -569,29 +806,50 @@ static func _build_village(world: Node3D, root: Node) -> void:
 	var wall: PackedScene = load(ASSET_PATH + "log-wall.glb")
 	var cabin: PackedScene = load(ASSET_PATH + "cabin.glb")
 	var tower: PackedScene = load(ASSET_PATH + "stronghold-tower.glb")
-	var gate: PackedScene = load(ASSET_PATH + "gate.glb")
-	for segment in range(19):
-		var x := 9.0 + segment * 2.1
-		_instance_model(village, root, wall, "FrontWall%02d" % segment, Vector3(x, 0.75, -25.0))
-	for segment in range(17):
-		var z := -27.1 - segment * 2.1
-		_instance_model(village, root, wall, "SideWall%02d" % segment, Vector3(48.0, 0.75, z), PI / 2.0)
-	for segment in range(18):
-		var x := 10.0 + segment * 2.1
-		_instance_model(village, root, wall, "BackWall%02d" % segment, Vector3(x, 0.75, -63.0))
-	for segment in range(17):
-		var z := -27.1 - segment * 2.1
-		_instance_model(village, root, wall, "RiverSideWall%02d" % segment, Vector3(8.0, 0.75, z), PI / 2.0)
-	_instance_model(village, root, tower, "WestWatchtower", Vector3(9.0, 0.75, -25.0))
-	_instance_model(village, root, tower, "EastWatchtower", Vector3(46.0, 0.75, -25.0))
-	_instance_model(village, root, gate, "VillageGate", Vector3(29.0, 0.75, -25.3))
-	var huts := [Vector3(16, 0.75, -34), Vector3(27, 0.75, -36), Vector3(39, 0.75, -35), Vector3(17, 0.75, -48), Vector3(30, 0.75, -51), Vector3(41, 0.75, -49), Vector3(22, 0.75, -59)]
+	var tower_wall := _tower_log_wall()
+	var center := Vector2(28.5, -44.0)
+	var radius := 19.0
+	var segment_count := 58
+	for segment in range(segment_count):
+		if segment == 0 or segment == segment_count - 1:
+			continue
+		var angle := TAU * (segment + 0.5) / segment_count
+		var x := center.x + sin(angle) * radius
+		var z := center.y + cos(angle) * radius
+		var ground := terrain_surface_height(x, z) - 0.04
+		var panel := _instance_model(village, root, wall, "CircularWall%02d" % segment, Vector3(x, ground, z), angle)
+		panel.scale.y = 1.4
+		var collision_name := "CircularWall%02dCollision" % segment
+		_wall_collider(village, root, collision_name, Vector3(x, ground + 1.7, z), Vector3(2.12, 3.4, 0.55))
+		(village.get_node(collision_name) as StaticBody3D).rotation.y = angle
+	for index in range(4):
+		var angle := [PI / 3.0, 2.0 * PI / 3.0, -2.0 * PI / 3.0, -PI / 3.0][index] as float
+		var x := center.x + sin(angle) * radius
+		var z := center.y + cos(angle) * radius
+		_fort_tower(village, root, tower, tower_wall, "Watchtower%02d" % index, Vector3(x, terrain_surface_height(x, z) - 0.04, z))
+	var gate_position := Vector3(center.x, terrain_surface_height(center.x, -25.0), -25.0)
+	_instance_model(village, root, tower, "OpenGatehouse", gate_position)
+	_tower_wall(village, root, tower_wall, "GatehouseWestWall", gate_position + Vector3(-1.72, 0, 0), PI / 2.0)
+	_tower_wall(village, root, tower_wall, "GatehouseEastWall", gate_position + Vector3(1.72, 0, 0), PI / 2.0)
+	_wall_collider(village, root, "GateWestPostCollision", gate_position + Vector3(-1.72, 2.5, 0), Vector3(0.35, 5.0, 3.5))
+	_wall_collider(village, root, "GateEastPostCollision", gate_position + Vector3(1.72, 2.5, 0), Vector3(0.35, 5.0, 3.5))
+	_village_road(village, root)
+	var huts := [Vector3(20, 0.75, -34), Vector3(37, 0.75, -34), Vector3(16.5, 0.75, -44), Vector3(40.5, 0.75, -44), Vector3(21, 0.75, -53), Vector3(36, 0.75, -53), Vector3(28.5, 0.75, -56)]
 	for index in range(huts.size()):
-		_instance_model(village, root, cabin, "TimberHut%02d" % index, huts[index], (index % 3 - 1) * 0.15, 1.05 + (index % 2) * 0.12)
-	_wall_collider(village, root, "FrontWallCollision", Vector3(28.5, 2.0, -25.0), Vector3(40.0, 2.5, 0.55))
-	_wall_collider(village, root, "WestWallCollision", Vector3(8.0, 2.0, -44.0), Vector3(0.55, 2.5, 38.0))
-	_wall_collider(village, root, "EastWallCollision", Vector3(48.0, 2.0, -44.0), Vector3(0.55, 2.5, 38.0))
-	_wall_collider(village, root, "BackWallCollision", Vector3(28.0, 2.0, -63.0), Vector3(40.0, 2.5, 0.55))
+		var yaw := (index % 3 - 1) * 0.15
+		var hut_scale := 1.05 + (index % 2) * 0.12
+		var hut: Vector3 = huts[index]
+		hut.y = terrain_surface_height(hut.x, hut.z)
+		_instance_model(village, root, cabin, "TimberHut%02d" % index, hut, yaw, hut_scale)
+		var collision_name := "TimberHut%02dCollision" % index
+		_wall_collider(village, root, collision_name, hut + Vector3(0, 1.5, 0), Vector3(5.6, 3.0, 5.0) * hut_scale)
+		(village.get_node(collision_name) as StaticBody3D).rotation.y = yaw
+	var stronghold_assets := "res://assets/library/survival-camp-stronghold/"
+	_instance_model(village, root, load(stronghold_assets + "wood-storage.glb"), "FirewoodShelter", Vector3(20.0, terrain_surface_height(20.0, -39.0), -39.0), 0.3)
+	_instance_model(village, root, load(stronghold_assets + "anvil.glb"), "SmithAnvil", Vector3(22.0, terrain_surface_height(22.0, -40.0), -40.0), -0.3)
+	_instance_model(village, root, load(stronghold_assets + "crock-pot.glb"), "CourtyardCauldron", Vector3(23.5, terrain_surface_height(23.5, -43.0), -43.0))
+	_instance_model(village, root, load(stronghold_assets + "torch.glb"), "WestGateTorch", Vector3(25.0, terrain_surface_height(25.0, -24.1), -24.1))
+	_instance_model(village, root, load(stronghold_assets + "torch.glb"), "EastGateTorch", Vector3(33.0, terrain_surface_height(33.0, -24.1), -24.1))
 
 
 static func _build_trees(world: Node3D, root: Node) -> void:
@@ -637,6 +895,7 @@ static func rebuild_river_landscape(root: Node3D) -> void:
 	_build_field(world, root)
 	_build_rocks(world, root)
 	_build_trees(world, root)
+	build_road(root)
 	var player := root.get_node("Player") as CharacterBody3D
 	player.collision_mask |= 4
 
@@ -742,6 +1001,7 @@ static func build(root: Node3D) -> void:
 	_build_rocks(world, root)
 	_build_village(world, root)
 	_build_trees(world, root)
+	build_road(root)
 	_build_atmosphere(world, root)
 	_lighting(root)
 	var player := root.get_node("Player") as CharacterBody3D
