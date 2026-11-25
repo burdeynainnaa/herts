@@ -39,6 +39,16 @@ offset), so the legs keep the source stride exactly and the feet stop sliding si
 `walk_animation_override`). Edit the keep and gain constants in the baker and save the clip
 again to retune the gait.
 
+## The sprint clip
+
+`scripts/characters/sprint_run.gd` rebuilds the shipped Run into
+`assets/models/herts_cossack_reference/run_sprint.tres`: the same stride played in 0.67 s
+instead of 0.83 s (about 180 steps a minute), plus a forward lean from the pelvis and spine
+while the head stays up. `player.gd` plays it as `RunSprint` (see `run_animation_override`),
+and `run_speed` and `run_clip_ground_speed` are both 6.0 so the feet keep their grip on the
+ground at full sprint. Retune `TIME_SCALE`, `HIPS_PITCH_DEGREES` and `SPINE_LEAN_DEGREES`
+in the baker, save the clip again, and keep the two speeds equal to the clip's contact speed.
+
 Godot's `.godot/` import cache and Summer's `.summer/local/` state are local and
 are not versioned. Commit source assets and their Godot import settings when
 they are added, not the generated cache.

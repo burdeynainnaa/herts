@@ -10,7 +10,7 @@ const REQUIRED_ACTIONS: Array[StringName] = [
 
 @export_category("Movement")
 @export var walk_speed: float = 1.45
-@export var run_speed: float = 4.7
+@export var run_speed: float = 6.0
 @export var acceleration: float = 14.0
 @export var jump_velocity: float = 3.8
 @export var turn_speed: float = 12.0
@@ -20,12 +20,14 @@ const REQUIRED_ACTIONS: Array[StringName] = [
 @export var relax_idle_right_arm: bool = false
 @export var character_tint: Color = Color.WHITE
 @export_file("*.tres") var walk_animation_override: String = "res://assets/models/herts_cossack_reference/walk_stoic.tres"
+@export_file("*.tres") var run_animation_override: String = "res://assets/models/herts_cossack_reference/run_sprint.tres"
 
 const WALK_OVERRIDE_CLIP: StringName = &"WalkStoic"
+const RUN_OVERRIDE_CLIP: StringName = &"RunSprint"
 
 @export_category("Animation Sync")
 @export var walk_clip_ground_speed: float = 1.45
-@export var run_clip_ground_speed: float = 4.7
+@export var run_clip_ground_speed: float = 6.0
 @export var min_animation_speed: float = 0.6
 @export var max_animation_speed: float = 1.5
 
@@ -217,25 +219,26 @@ func _configure_character_animation() -> bool:
 	for role in [&"idle", &"walk", &"run"]:
 		_animation_player.get_animation(_clips_by_role[role]).loop_mode = Animation.LOOP_LINEAR
 	_animation_player.get_animation(_clips_by_role[&"jump"]).loop_mode = Animation.LOOP_NONE
-	_apply_walk_override()
+	_apply_clip_override(walk_animation_override, WALK_OVERRIDE_CLIP, &"walk")
+	_apply_clip_override(run_animation_override, RUN_OVERRIDE_CLIP, &"run")
 	return true
 
 
-func _apply_walk_override() -> void:
-	if walk_animation_override.is_empty() or not ResourceLoader.exists(walk_animation_override):
+func _apply_clip_override(path: String, clip: StringName, role: StringName) -> void:
+	if path.is_empty() or not ResourceLoader.exists(path):
 		return
-	var override := load(walk_animation_override) as Animation
+	var override := load(path) as Animation
 	if override == null:
-		push_warning("SummerThirdPersonController: walk animation override is not an animation: %s" % walk_animation_override)
+		push_warning("SummerThirdPersonController: animation override is not an animation: %s" % path)
 		return
 	override.loop_mode = Animation.LOOP_LINEAR
-	if not _animation_player.has_animation(WALK_OVERRIDE_CLIP):
+	if not _animation_player.has_animation(clip):
 		var library := _animation_player.get_animation_library(&"")
 		if library == null:
-			push_warning("SummerThirdPersonController: animation player has no default library for the walk override")
+			push_warning("SummerThirdPersonController: animation player has no default library for %s" % path)
 			return
-		library.add_animation(WALK_OVERRIDE_CLIP, override)
-	_clips_by_role[&"walk"] = WALK_OVERRIDE_CLIP
+		library.add_animation(clip, override)
+	_clips_by_role[role] = clip
 
 
 func _update_animation_state() -> void:
