@@ -17,7 +17,8 @@ Summer starter scene remains at `main.tscn` as a reference.
 
 Open this folder as a Summer Engine project and run the project with Play.
 The configured entry point is `scenes/main.tscn`. Use WASD to walk, hold Shift
-to run, Space to jump, and the mouse to look around. Escape releases the mouse;
+to run, Space to jump, and the mouse to look around. Press F near the horse to
+mount or dismount; use WASD to ride and hold Shift to gallop. Escape releases the mouse;
 click the game to capture it again. The project uses the Forward+ renderer and
 Jolt 3D physics.
 
@@ -52,3 +53,8 @@ in the baker, save the clip again, and keep the two speeds equal to the clip's c
 Godot's `.godot/` import cache and Summer's `.summer/local/` state are local and
 are not versioned. Commit source assets and their Godot import settings when
 they are added, not the generated cache.
+
+## Asset credit
+
+The Draft Horse model is a community asset from the Summer asset store
+(asset ID `2427ace4-0cfd-419b-8817-18d93a5ef9fc`, attribution license).

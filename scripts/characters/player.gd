@@ -3,7 +3,7 @@ extends CharacterBody3D
 
 const REQUIRED_ROLES: Array[StringName] = [&"idle", &"walk", &"run", &"jump"]
 const REQUIRED_ACTIONS: Array[StringName] = [
-	&"move_left", &"move_right", &"move_forward", &"move_back", &"jump", &"sprint", &"ui_cancel"
+	&"move_left", &"move_right", &"move_forward", &"move_back", &"jump", &"sprint", &"ui_cancel", &"mount_horse"
 ]
 
 @export_file("*.json") var character_manifest_path: String
@@ -62,6 +62,11 @@ var _spawn_position: Vector3
 var _clips_by_role: Dictionary = {}
 var _active_role: StringName = &""
 var _idle_arm_modifier: SkeletonModifier3D
+var _riding_modifier: SkeletonModifier3D
+var _horse: CharacterBody3D
+var _mounted: bool = false
+var _normal_collision_layer: int
+var _normal_collision_mask: int
 
 
 func _ready() -> void:
@@ -76,6 +81,9 @@ func _ready() -> void:
 			character_mesh.set_surface_override_material(0, tinted_material)
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity"))
 	_spawn_position = global_position
+	_normal_collision_layer = collision_layer
+	_normal_collision_mask = collision_mask
+	_horse = get_node_or_null("../Horse") as CharacterBody3D
 	floor_snap_length = floor_snap_distance
 	_camera_yaw.top_level = true
 	_camera_yaw.global_position = _camera_target_position()
@@ -91,6 +99,11 @@ func _ready() -> void:
 		_idle_arm_modifier = preload("res://scripts/characters/relaxed_idle_arm.gd").new()
 		_idle_arm_modifier.influence = 0.0
 		skeleton.add_child(_idle_arm_modifier)
+	var riding_skeleton := get_node_or_null(skeleton_path) as Skeleton3D
+	if riding_skeleton != null:
+		_riding_modifier = preload("res://scripts/characters/riding_pose.gd").new()
+		_riding_modifier.influence = 0.0
+		riding_skeleton.add_child(_riding_modifier)
 	_play_role(&"idle")
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -101,14 +114,19 @@ func _process(delta: float) -> void:
 	var target := _camera_target_position()
 	_camera_yaw.global_position = _camera_yaw.global_position.lerp(target, 1.0 - exp(-camera_follow_speed * delta))
 	if _idle_arm_modifier != null:
-		var target_influence := 1.0 if _active_role == &"idle" else 0.0
+		var target_influence := 1.0 if _active_role == &"idle" and not _mounted else 0.0
 		_idle_arm_modifier.influence = move_toward(
 			_idle_arm_modifier.influence, target_influence, delta / maxf(animation_blend_time, 0.001)
+		)
+	if _riding_modifier != null:
+		_riding_modifier.influence = move_toward(
+			_riding_modifier.influence, 1.0 if _mounted else 0.0, delta / maxf(animation_blend_time, 0.001)
 		)
 
 
 func _camera_target_position() -> Vector3:
-	return global_position + Vector3.UP * camera_height + _camera_yaw.global_basis.x * camera_shoulder_offset
+	var height := camera_height + (0.5 if _mounted else 0.0)
+	return global_position + Vector3.UP * height + _camera_yaw.global_basis.x * camera_shoulder_offset
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -128,6 +146,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if Input.is_action_just_pressed(&"mount_horse"):
+		_toggle_mount()
+	if _mounted:
+		_ride_horse(delta)
+		return
 	var was_on_floor := is_on_floor()
 	if was_on_floor:
 		velocity.y = -floor_stick_velocity
@@ -161,6 +184,70 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector3.ZERO
 		_camera_yaw.global_position = _camera_target_position()
 		_play_role(&"idle")
+
+
+func _toggle_mount() -> void:
+	if not is_instance_valid(_horse):
+		return
+	if _mounted:
+		_dismount()
+	elif global_position.distance_to(_horse.global_position) <= 3.2:
+		_mounted = true
+		_horse.mounted = true
+		collision_layer = 0
+		collision_mask = 0
+		velocity = Vector3.ZERO
+		_spring_arm.spring_length = camera_distance + 1.2
+		_play_role(&"idle")
+
+
+func _ride_horse(delta: float) -> void:
+	var input_vector := Input.get_vector(&"move_left", &"move_right", &"move_forward", &"move_back")
+	var forward := -_camera_yaw.global_basis.z
+	var right := _camera_yaw.global_basis.x
+	forward.y = 0.0
+	right.y = 0.0
+	var direction := right.normalized() * input_vector.x - forward.normalized() * input_vector.y
+	if direction.length_squared() > 1.0:
+		direction = direction.normalized()
+	_horse.ride(direction, Input.is_action_pressed(&"sprint"), delta)
+	global_position = _horse.global_position
+	_visual_root.rotation.y = _horse.rotation.y
+	_visual_root.position.y = 0.58 + float(_horse.saddle_offset)
+	if global_position.y < respawn_below_y:
+		_horse.global_position = _spawn_position
+		_horse.velocity = Vector3.ZERO
+		global_position = _spawn_position
+
+
+func _dismount() -> void:
+	var space := get_world_3d().direct_space_state
+	var shape_node := get_node("CollisionShape3D") as CollisionShape3D
+	for side in [1.0, -1.0]:
+		var offset: Vector3 = _horse.global_basis.x * float(side) * 1.65
+		var start: Vector3 = _horse.global_position + offset + Vector3.UP * 2.0
+		var ray := PhysicsRayQueryParameters3D.create(start, start + Vector3.DOWN * 4.0, _normal_collision_mask)
+		ray.exclude = [get_rid(), _horse.get_rid()]
+		var hit := space.intersect_ray(ray)
+		if hit.is_empty() or (hit.normal as Vector3).y < 0.7:
+			continue
+		var landing: Vector3 = hit.position + Vector3.UP * 0.08
+		var query := PhysicsShapeQueryParameters3D.new()
+		query.shape = shape_node.shape
+		query.transform = Transform3D(Basis.IDENTITY, landing + shape_node.position)
+		query.collision_mask = _normal_collision_mask
+		query.exclude = [get_rid(), _horse.get_rid()]
+		if not space.intersect_shape(query, 1).is_empty():
+			continue
+		_mounted = false
+		_horse.mounted = false
+		_horse.velocity = Vector3.ZERO
+		global_position = landing
+		collision_layer = _normal_collision_layer
+		collision_mask = _normal_collision_mask
+		_visual_root.position.y = 0.0
+		_spring_arm.spring_length = camera_distance
+		return
 
 
 func _reject_contract(message: String) -> bool:

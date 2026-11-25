@@ -1,0 +1,106 @@
+{
+  "id": "character-2427ace4-0cfd-419b-8817-18d93a5ef9fc",
+  "rig": {
+    "path": "res://assets/models/draft_horse/rig.glb",
+    "assetId": "2427ace4-0cfd-419b-8817-18d93a5ef9fc",
+    "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1791494186/summer_3d/character_2427ace4-0cfd-419b-8817-18d93a5ef9fc_runtime_1791494185904_vlk6gl37.glb",
+    "sourceFileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1791494177/summer_3d/rig_image-to-3d-1pqcu0d-animation-batch_1791494175804_b6ogc1rr.glb",
+    "artifactFingerprint": "publicId:summer_3d/character_2427ace4-0cfd-419b-8817-18d93a5ef9fc_runtime_1791494185904_vlk6gl37.glb"
+  },
+  "status": "ready",
+  "version": 2,
+  "provider": {
+    "mode": "managed",
+    "name": "fal",
+    "rigTaskId": "01a11d5e-6701-701e-8856-38a417db81ba"
+  },
+  "animations": [
+    {
+      "id": "animation-2427ace4-0cfd-419b-8817-18d93a5ef9fc-11",
+      "loop": true,
+      "name": "idle",
+      "path": "res://assets/models/draft_horse/rig.glb",
+      "assetId": "1f85d45b-1ec1-4ef8-8ef6-3fead058b662",
+      "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1791494181/summer_animations/animation_image-to-3d-1pqcu0d-11_1791494180123_d30s7see.glb",
+      "actionId": 11,
+      "description": "idle animation for Draft Horse.",
+      "semanticRole": "idle",
+      "artifactFingerprint": "assetId:1f85d45b-1ec1-4ef8-8ef6-3fead058b662"
+    },
+    {
+      "id": "animation-2427ace4-0cfd-419b-8817-18d93a5ef9fc-1",
+      "loop": true,
+      "name": "walk",
+      "path": "res://assets/models/draft_horse/rig.glb",
+      "assetId": "57c44782-43ae-4394-8afd-7c2fca3f34ff",
+      "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1791494181/summer_animations/animation_image-to-3d-1pqcu0d-1_1791494180442_pq7mf7sn.glb",
+      "actionId": 1,
+      "description": "walk animation for Draft Horse.",
+      "semanticRole": "walk",
+      "artifactFingerprint": "assetId:57c44782-43ae-4394-8afd-7c2fca3f34ff"
+    },
+    {
+      "id": "animation-2427ace4-0cfd-419b-8817-18d93a5ef9fc-15",
+      "loop": true,
+      "name": "run",
+      "path": "res://assets/models/draft_horse/rig.glb",
+      "assetId": "a8777c48-99a6-4692-b9f6-14a54e1bf597",
+      "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1791494181/summer_animations/animation_image-to-3d-1pqcu0d-15_1791494180072_5pgnglf4.glb",
+      "actionId": 15,
+      "description": "run animation for Draft Horse.",
+      "semanticRole": "run",
+      "artifactFingerprint": "assetId:a8777c48-99a6-4692-b9f6-14a54e1bf597"
+    }
+  ],
+  "characterId": "2427ace4-0cfd-419b-8817-18d93a5ef9fc",
+  "displayName": "Draft Horse",
+  "forwardAxis": "-Z",
+  "directoryName": "draft_horse_2427ace4",
+  "runtimeBundle": {
+    "clips": [
+      "idle",
+      "walk",
+      "run"
+    ],
+    "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1791494186/summer_3d/character_2427ace4-0cfd-419b-8817-18d93a5ef9fc_runtime_1791494185904_vlk6gl37.glb",
+    "publicId": "summer_3d/character_2427ace4-0cfd-419b-8817-18d93a5ef9fc_runtime_1791494185904_vlk6gl37.glb",
+    "validation": {
+      "ok": true,
+      "clips": [
+        {
+          "name": "idle",
+          "channels": 66,
+          "duration": 1.9
+        },
+        {
+          "name": "walk",
+          "channels": 66,
+          "duration": 1
+        },
+        {
+          "name": "run",
+          "channels": 66,
+          "duration": 0.833
+        }
+      ],
+      "errors": [],
+      "sizeBytes": 12151396
+    },
+    "skeletonFingerprint": "1bv4k3j"
+  },
+  "rootYawRadians": 3.141592653589793,
+  "unriggedSource": {
+    "assetId": "2427ace4-0cfd-419b-8817-18d93a5ef9fc",
+    "fileUrl": "https://res.cloudinary.com/dol86wsz1/raw/upload/v1791494030/summer_3d/3d_2427ace40cfd419b881718d9_1791494028799.glb"
+  },
+  "scaleMultiplier": 1,
+  "sourceForwardAxis": "+Z",
+  "groundOffsetMeters": 0,
+  "targetHeightMeters": 1.72,
+  "skeletonFingerprint": "1bv4k3j",
+  "packageRevision": "sha256:e711793fd4435f7991cee946acf91fa0e0e8a47d7f1537d37cce7b9182318bf9",
+  "normalization": {
+    "targetHeightMeters": 1.72,
+    "forwardAxis": "-Z"
+  }
+}
