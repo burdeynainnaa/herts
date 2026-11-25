@@ -19,6 +19,9 @@ const REQUIRED_ACTIONS: Array[StringName] = [
 @export var animation_blend_time: float = 0.25
 @export var relax_idle_right_arm: bool = false
 @export var character_tint: Color = Color.WHITE
+@export_file("*.tres") var walk_animation_override: String = "res://assets/models/herts_cossack_reference/walk_stoic.tres"
+
+const WALK_OVERRIDE_CLIP: StringName = &"WalkStoic"
 
 @export_category("Animation Sync")
 @export var walk_clip_ground_speed: float = 1.45
@@ -214,7 +217,25 @@ func _configure_character_animation() -> bool:
 	for role in [&"idle", &"walk", &"run"]:
 		_animation_player.get_animation(_clips_by_role[role]).loop_mode = Animation.LOOP_LINEAR
 	_animation_player.get_animation(_clips_by_role[&"jump"]).loop_mode = Animation.LOOP_NONE
+	_apply_walk_override()
 	return true
+
+
+func _apply_walk_override() -> void:
+	if walk_animation_override.is_empty() or not ResourceLoader.exists(walk_animation_override):
+		return
+	var override := load(walk_animation_override) as Animation
+	if override == null:
+		push_warning("SummerThirdPersonController: walk animation override is not an animation: %s" % walk_animation_override)
+		return
+	override.loop_mode = Animation.LOOP_LINEAR
+	if not _animation_player.has_animation(WALK_OVERRIDE_CLIP):
+		var library := _animation_player.get_animation_library(&"")
+		if library == null:
+			push_warning("SummerThirdPersonController: animation player has no default library for the walk override")
+			return
+		library.add_animation(WALK_OVERRIDE_CLIP, override)
+	_clips_by_role[&"walk"] = WALK_OVERRIDE_CLIP
 
 
 func _update_animation_state() -> void:

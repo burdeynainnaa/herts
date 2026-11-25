@@ -28,6 +28,15 @@ Jolt 3D physics.
 - `assets/` holds future models, textures, and audio used by the game.
 - `project.godot` contains the project and engine settings.
 
+## The walk clip
+
+The character package ships a walk with a strong pelvis sway. `scripts/characters/stoic_walk.gd`
+rebuilds it into `assets/models/herts_cossack_reference/walk_stoic.tres`: the pelvis barely
+turns, the arms swing about half as far, and the shoulder girdle counter-rotates against the
+stride. `scripts/characters/player.gd` plays that clip as `WalkStoic` (see
+`walk_animation_override`). Edit the keep and gain constants in the baker and save the clip
+again to retune the gait.
+
 Godot's `.godot/` import cache and Summer's `.summer/local/` state are local and
 are not versioned. Commit source assets and their Godot import settings when
 they are added, not the generated cache.
