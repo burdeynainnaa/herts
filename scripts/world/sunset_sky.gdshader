@@ -62,11 +62,6 @@ void sky() {
 	vec3 upper = vec3(0.035, 0.006, 0.020);
 	vec3 color = mix(horizon, upper, smoothstep(0.0, 0.52, altitude));
 	color += vec3(0.64, 0.28, 0.075) * glow;
-	float sun_distance = length(vec2(sun_x, altitude - 0.035));
-	float sun_halo = exp(-sun_distance * sun_distance * 85.0);
-	float sun_disc = 1.0 - smoothstep(0.009, 0.015, sun_distance);
-	color += vec3(0.45, 0.27, 0.09) * sun_halo;
-	color += vec3(1.5, 1.0, 0.48) * sun_disc;
 
 	float billows = smooth_noise(vec2(azimuth * 5.0 + 3.4, altitude * 9.0 + 1.8));
 	float fine_billows = smooth_noise(vec2(azimuth * 11.0 - 2.0, altitude * 19.0 + 4.6));

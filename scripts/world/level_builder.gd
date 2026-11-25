@@ -702,8 +702,8 @@ static func _build_atmosphere(world: Node3D, root: Node) -> void:
 static func _lighting(root: Node3D) -> void:
 	var sun := root.get_node("Sun") as DirectionalLight3D
 	sun.rotation_degrees = Vector3(-7.0, 172.0, 0.0)
-	sun.light_color = Color(1.0, 0.72, 0.48)
-	sun.light_energy = 1.6
+	sun.light_color = Color(1.0, 0.66, 0.43)
+	sun.light_energy = 1.25
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 120.0
 	var sky := Sky.new()
@@ -714,16 +714,12 @@ static func _lighting(root: Node3D) -> void:
 	environment.background_mode = Environment.BG_SKY
 	environment.sky = sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.62, 0.60, 0.65)
-	environment.ambient_light_energy = 0.55
+	environment.ambient_light_color = Color(0.52, 0.48, 0.45)
+	environment.ambient_light_energy = 0.38
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	environment.glow_enabled = true
-	environment.glow_intensity = 0.35
-	environment.glow_hdr_threshold = 1.1
 	environment.fog_enabled = true
-	environment.fog_light_color = Color(0.61, 0.39, 0.32)
-	environment.fog_density = 0.0045
-	environment.fog_sun_scatter = 0.05
+	environment.fog_light_color = Color(0.49, 0.31, 0.26)
+	environment.fog_density = 0.004
 	environment.fog_sky_affect = 0.05
 	(root.get_node("WorldEnvironment") as WorldEnvironment).environment = environment
 
