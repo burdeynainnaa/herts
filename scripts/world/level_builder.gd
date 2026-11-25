@@ -6,13 +6,27 @@ const WORLD_MAX_X := 100.0
 const WORLD_MIN_Z := -155.0
 const WORLD_MAX_Z := 35.0
 const TERRAIN_STEP := 2.5
+const WATER_LEVEL := 0.28
+const ISLAND_CENTER_Z := -69.0
+const ISLAND_HALF_LENGTH := 32.0
+const ISLAND_HALF_WIDTH := 10.0
 
 static func river_center(z: float) -> float:
-	return -48.0 + 40.0 * (1.0 - smoothstep(-100.0, 15.0, z)) + 8.0 * sin(z * 0.055)
+	return -51.0 + 40.0 * (1.0 - smoothstep(-100.0, 15.0, z)) + 8.0 * sin(z * 0.055)
 
 
 static func river_width(z: float) -> float:
-	return 12.0 + 4.0 * (0.5 + 0.5 * sin(z * 0.026 + 0.8))
+	return 17.0 + 4.0 * (0.5 + 0.5 * sin(z * 0.026 + 0.8))
+
+
+static func island_center(z: float) -> float:
+	return river_center(z) - 1.5
+
+
+static func island_weight(x: float, z: float) -> float:
+	var along := (z - ISLAND_CENTER_Z) / ISLAND_HALF_LENGTH
+	var across := (x - island_center(z)) / ISLAND_HALF_WIDTH
+	return 1.0 - smoothstep(0.78, 1.06, sqrt(along * along + across * across))
 
 
 static func terrain_height(x: float, z: float) -> float:
@@ -26,7 +40,25 @@ static func terrain_height(x: float, z: float) -> float:
 	var bank_distance := absf(x - river_center(z)) - river_width(z)
 	var channel := 1.0 - smoothstep(-1.0, 5.0, bank_distance)
 	height = lerpf(height, -0.85, channel)
+	var island_height := 0.86 + 0.09 * sin(x * 0.25 + z * 0.12)
+	height = lerpf(height, island_height, island_weight(x, z))
 	return height
+
+
+static func terrain_surface_height(x: float, z: float) -> float:
+	x = clampf(x, WORLD_MIN_X, WORLD_MAX_X - 0.001)
+	z = clampf(z, WORLD_MIN_Z, WORLD_MAX_Z - 0.001)
+	var cell_x := WORLD_MIN_X + floorf((x - WORLD_MIN_X) / TERRAIN_STEP) * TERRAIN_STEP
+	var cell_z := WORLD_MIN_Z + floorf((z - WORLD_MIN_Z) / TERRAIN_STEP) * TERRAIN_STEP
+	var across := (x - cell_x) / TERRAIN_STEP
+	var along := (z - cell_z) / TERRAIN_STEP
+	var a := terrain_height(cell_x, cell_z)
+	var b := terrain_height(cell_x + TERRAIN_STEP, cell_z)
+	var c := terrain_height(cell_x, cell_z + TERRAIN_STEP)
+	var d := terrain_height(cell_x + TERRAIN_STEP, cell_z + TERRAIN_STEP)
+	if across + along <= 1.0:
+		return a + (b - a) * across + (c - a) * along
+	return d + (c - d) * (1.0 - across) + (b - d) * (1.0 - along)
 
 
 static func _owned(parent: Node, child: Node, root: Node) -> void:
@@ -53,7 +85,12 @@ static func _terrain_color(x: float, z: float, shade: float) -> Color:
 	var rock := smoothstep(7.0, 10.0, z) * (1.0 - smoothstep(14.0, 18.0, z)) * (1.0 - smoothstep(2.0, 5.0, absf(x)))
 	var grass := Color(0.25, 0.32, 0.16).lerp(Color(0.43, 0.44, 0.24), shade)
 	var earth := Color(0.25, 0.26, 0.25).lerp(Color(0.41, 0.40, 0.37), shade)
-	return grass.lerp(earth, rock * 0.9)
+	var color := grass.lerp(earth, rock * 0.9)
+	if absf(x - river_center(z)) < river_width(z) + 8.0:
+		var height := terrain_height(x, z)
+		var beach := smoothstep(WATER_LEVEL - 0.2, WATER_LEVEL + 0.1, height) * (1.0 - smoothstep(WATER_LEVEL + 0.35, WATER_LEVEL + 1.2, height))
+		color = color.lerp(Color(0.48, 0.42, 0.29), beach * 0.8)
+	return color
 
 
 static func _build_terrain(world: Node3D, root: Node) -> void:
@@ -70,9 +107,13 @@ static func _build_terrain(world: Node3D, root: Node) -> void:
 			var c := Vector3(x, terrain_height(x, z + TERRAIN_STEP), z + TERRAIN_STEP)
 			var d := Vector3(x + TERRAIN_STEP, terrain_height(x + TERRAIN_STEP, z + TERRAIN_STEP), z + TERRAIN_STEP)
 			var shade := 0.5 + 0.5 * sin(x * 0.47 + z * 0.26) * cos(z * 0.31 - x * 0.16)
-			var color := _terrain_color(x, z, shade)
-			_triangle(surface, a, b, c, color)
-			_triangle(surface, b, d, c, color.lightened(0.025))
+			var color_a := _terrain_color(a.x, a.z, shade)
+			var color_b := _terrain_color(b.x, b.z, shade)
+			var color_c := _terrain_color(c.x, c.z, shade)
+			var color_d := _terrain_color(d.x, d.z, shade)
+			for pair in [[a, color_a], [b, color_b], [c, color_c], [b, color_b], [d, color_d], [c, color_c]]:
+				surface.set_color(pair[1])
+				surface.add_vertex(pair[0])
 	surface.generate_normals()
 	var mesh := surface.commit()
 	mesh.surface_set_material(0, _material(Color.WHITE, true))
@@ -97,11 +138,11 @@ static func _build_river(world: Node3D, root: Node) -> void:
 	for segment in range(95):
 		var z := WORLD_MIN_Z + segment * 2.0
 		var next_z := z + 2.0
-		var left := Vector3(river_center(z) - river_width(z), 0.28, z)
-		var right := Vector3(river_center(z) + river_width(z), 0.28, z)
-		var next_left := Vector3(river_center(next_z) - river_width(next_z), 0.28, next_z)
-		var next_right := Vector3(river_center(next_z) + river_width(next_z), 0.28, next_z)
-		var water_color := Color(0.018, 0.060, 0.085).lerp(Color(0.035, 0.11, 0.15), 0.5 + 0.5 * sin(z * 0.12))
+		var left := Vector3(river_center(z) - river_width(z) - 7.0, WATER_LEVEL, z)
+		var right := Vector3(river_center(z) + river_width(z) + 7.0, WATER_LEVEL, z)
+		var next_left := Vector3(river_center(next_z) - river_width(next_z) - 7.0, WATER_LEVEL, next_z)
+		var next_right := Vector3(river_center(next_z) + river_width(next_z) + 7.0, WATER_LEVEL, next_z)
+		var water_color := Color(0.022, 0.075, 0.11).lerp(Color(0.035, 0.105, 0.14), 0.5 + 0.5 * sin(z * 0.035))
 		_triangle(surface, left, right, next_left, water_color)
 		_triangle(surface, right, next_right, next_left, water_color)
 	surface.generate_normals()
@@ -119,14 +160,16 @@ static func _build_river(world: Node3D, root: Node) -> void:
 	ripples.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var random := RandomNumberGenerator.new()
 	random.seed = 9245
-	for index in range(700):
+	for index in range(220):
 		var z := random.randf_range(WORLD_MIN_Z, WORLD_MAX_Z)
 		var x := river_center(z) + random.randf_range(-river_width(z) * 0.85, river_width(z) * 0.85)
+		if terrain_surface_height(x, z) > WATER_LEVEL - 0.05:
+			continue
 		var length := random.randf_range(0.4, 2.4)
-		var color := Color(0.54, 0.58, 0.57).lerp(Color(0.76, 0.57, 0.42), random.randf())
-		var a := Vector3(x, 0.30, z)
-		var b := Vector3(x + length, 0.30, z + 0.05)
-		var c := Vector3(x, 0.30, z + 0.07)
+		var color := Color(0.22, 0.31, 0.34).lerp(Color(0.46, 0.38, 0.31), random.randf())
+		var a := Vector3(x, WATER_LEVEL + 0.02, z)
+		var b := Vector3(x + length, WATER_LEVEL + 0.02, z + 0.05)
+		var c := Vector3(x, WATER_LEVEL + 0.02, z + 0.045)
 		_triangle(ripples, a, b, c, color)
 	ripples.generate_normals()
 	var ripple_mesh := ripples.commit()
@@ -135,6 +178,77 @@ static func _build_river(world: Node3D, root: Node) -> void:
 	highlights.name = "RiverHighlights"
 	highlights.mesh = ripple_mesh
 	_owned(world, highlights, root)
+	_build_shores(world, root)
+
+
+static func _waterline_x(z: float, land_x: float, water_x: float) -> float:
+	for iteration in range(12):
+		var middle := (land_x + water_x) * 0.5
+		if terrain_surface_height(middle, z) > WATER_LEVEL:
+			land_x = middle
+		else:
+			water_x = middle
+	return land_x
+
+
+static func _append_shore(surface: SurfaceTool, faces: PackedVector3Array, previous_edge: Vector3, previous_beach: Vector3, edge: Vector3, beach: Vector3) -> void:
+	var sand := Color(0.48, 0.42, 0.30)
+	_triangle(surface, previous_edge, previous_beach, edge, sand)
+	_triangle(surface, previous_beach, beach, edge, sand.lightened(0.025))
+	var bottom_a := Vector3(previous_edge.x, -4.0, previous_edge.z)
+	var bottom_b := Vector3(edge.x, -4.0, edge.z)
+	var top_a := Vector3(previous_edge.x, 14.0, previous_edge.z)
+	var top_b := Vector3(edge.x, 14.0, edge.z)
+	faces.append_array(PackedVector3Array([bottom_a, top_a, bottom_b, bottom_b, top_a, top_b]))
+
+
+static func _build_shores(world: Node3D, root: Node) -> void:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var faces := PackedVector3Array()
+	var step := TERRAIN_STEP * 0.25
+	for island in [false, true]:
+		for side in [-1.0, 1.0]:
+			var previous_valid := false
+			var previous_edge := Vector3.ZERO
+			var previous_beach := Vector3.ZERO
+			for segment in range(int((WORLD_MAX_Z - WORLD_MIN_Z) / step) + 1):
+				var z := WORLD_MIN_Z + segment * step
+				if island and terrain_surface_height(island_center(z), z) <= WATER_LEVEL:
+					previous_valid = false
+					continue
+				var land_x: float = island_center(z) if island else river_center(z) + side * (river_width(z) + 7.0)
+				var water_x: float = river_center(z) + side * river_width(z) * 0.78
+				var shore_x := _waterline_x(z, land_x, water_x)
+				var land_direction: float = -side if island else side
+				var edge_x := shore_x + land_direction * 0.08
+				var beach_x := shore_x + land_direction * 1.35
+				var edge := Vector3(edge_x, terrain_surface_height(edge_x, z) + 0.025, z)
+				var beach := Vector3(beach_x, terrain_surface_height(beach_x, z) + 0.025, z)
+				if previous_valid:
+					_append_shore(surface, faces, previous_edge, previous_beach, edge, beach)
+				previous_edge = edge
+				previous_beach = beach
+				previous_valid = true
+	surface.generate_normals()
+	var sand_mesh := surface.commit()
+	sand_mesh.surface_set_material(0, _material(Color.WHITE, true))
+	var shore := MeshInstance3D.new()
+	shore.name = "RiverShoreline"
+	shore.mesh = sand_mesh
+	_owned(world, shore, root)
+	var body := StaticBody3D.new()
+	body.name = "WaterBoundary"
+	body.collision_layer = 4
+	body.collision_mask = 0
+	_owned(world, body, root)
+	var shape := ConcavePolygonShape3D.new()
+	shape.set_faces(faces)
+	shape.backface_collision = true
+	var collider := CollisionShape3D.new()
+	collider.name = "ShorelineBarrier"
+	collider.shape = shape
+	_owned(body, collider, root)
 
 
 static func _grass_mesh() -> ArrayMesh:
@@ -268,6 +382,41 @@ static func _build_rocks(world: Node3D, root: Node) -> void:
 		var basis := Basis(Vector3.UP, random.randf_range(0.0, TAU)).scaled(Vector3(size * 1.4, size * 0.55, size))
 		transforms.append(Transform3D(basis, Vector3(x, terrain_height(x, z) - 0.1, z)))
 	_add_multimesh(world, root, "RidgeAndFieldRocks", _rock_mesh(), transforms)
+	add_rock_collision(world, root)
+
+
+static func add_rock_collision(world: Node3D, root: Node) -> void:
+	var existing := world.get_node_or_null("RockCollision")
+	if existing != null:
+		existing.free()
+	var body := StaticBody3D.new()
+	body.name = "RockCollision"
+	_owned(world, body, root)
+	var rocks := world.get_node("RidgeAndFieldRocks") as MultiMeshInstance3D
+	var rock_faces := PackedVector3Array()
+	var mesh_faces := rocks.multimesh.mesh.get_faces()
+	for index in range(rocks.multimesh.instance_count):
+		var rock_transform := rocks.transform * rocks.multimesh.get_instance_transform(index)
+		for vertex in mesh_faces:
+			rock_faces.append(rock_transform * vertex)
+	var rock_shape := ConcavePolygonShape3D.new()
+	rock_shape.set_faces(rock_faces)
+	rock_shape.backface_collision = true
+	var rock_collider := CollisionShape3D.new()
+	rock_collider.name = "FieldRocks"
+	rock_collider.shape = rock_shape
+	_owned(body, rock_collider, root)
+	var ledge := world.get_node("SpawnRockLedge") as MeshInstance3D
+	var ledge_faces := PackedVector3Array()
+	for vertex in ledge.mesh.get_faces():
+		ledge_faces.append(ledge.transform * vertex)
+	var ledge_shape := ConcavePolygonShape3D.new()
+	ledge_shape.set_faces(ledge_faces)
+	ledge_shape.backface_collision = true
+	var ledge_collider := CollisionShape3D.new()
+	ledge_collider.name = "SpawnLedge"
+	ledge_collider.shape = ledge_shape
+	_owned(body, ledge_collider, root)
 
 
 static func _instance_model(parent: Node, root: Node, resource: PackedScene, node_name: String, position: Vector3, yaw: float = 0.0, scale_value: float = 1.0) -> Node3D:
@@ -292,7 +441,7 @@ static func _wall_collider(parent: Node, root: Node, node_name: String, position
 	_owned(body, collision, root)
 
 
-static func _canopy_lobe(surface: SurfaceTool, center: Vector3, radii: Vector3, offset: float) -> void:
+static func _canopy_lobe(surface: SurfaceTool, center: Vector3, radii: Vector3, offset: float, island_foliage := false) -> void:
 	var segments := 8
 	var rings := 4
 	for ring in range(rings):
@@ -308,7 +457,9 @@ static func _canopy_lobe(surface: SurfaceTool, center: Vector3, radii: Vector3, 
 			var upper := center + Vector3(cos(angle) * cos(upper_angle) * radii.x * variation, sin(upper_angle) * radii.y, sin(angle) * cos(upper_angle) * radii.z * variation)
 			var upper_next := center + Vector3(cos(next_angle) * cos(upper_angle) * radii.x * next_variation, sin(upper_angle) * radii.y, sin(next_angle) * cos(upper_angle) * radii.z * next_variation)
 			var shade := 0.5 + 0.5 * sin(segment * 1.7 + ring * 2.2 + offset)
-			var color := Color(0.14, 0.23, 0.12).lerp(Color(0.32, 0.39, 0.19), shade)
+			var dark := Color(0.10, 0.28, 0.10) if island_foliage else Color(0.14, 0.23, 0.12)
+			var light := Color(0.27, 0.46, 0.20) if island_foliage else Color(0.32, 0.39, 0.19)
+			var color := dark.lerp(light, shade)
 			_triangle(surface, lower, upper, lower_next, color)
 			_triangle(surface, lower_next, upper, upper_next, color.lightened(0.04))
 
@@ -336,6 +487,29 @@ static func _broadleaf_tree_mesh() -> ArrayMesh:
 	return mesh
 
 
+static func _island_tree_mesh() -> ArrayMesh:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for segment in range(7):
+		var angle := TAU * segment / 7.0
+		var next_angle := TAU * (segment + 1) / 7.0
+		var base := Vector3(cos(angle) * 0.25, 0, sin(angle) * 0.25)
+		var base_next := Vector3(cos(next_angle) * 0.25, 0, sin(next_angle) * 0.25)
+		var top := Vector3(cos(angle) * 0.13, 3.4, sin(angle) * 0.13)
+		var top_next := Vector3(cos(next_angle) * 0.13, 3.4, sin(next_angle) * 0.13)
+		var bark := Color(0.22, 0.20, 0.15).lightened(segment * 0.012)
+		_triangle(surface, base, top, base_next, bark)
+		_triangle(surface, base_next, top, top_next, bark)
+	_canopy_lobe(surface, Vector3(0, 3.6, 0), Vector3(2.3, 1.8, 2.2), 0.8, true)
+	_canopy_lobe(surface, Vector3(-1.5, 2.8, 0.25), Vector3(1.65, 1.5, 1.6), 2.7, true)
+	_canopy_lobe(surface, Vector3(1.45, 3.0, -0.2), Vector3(1.7, 1.55, 1.6), 4.5, true)
+	_canopy_lobe(surface, Vector3(0, 2.7, 1.35), Vector3(1.55, 1.4, 1.45), 6.8, true)
+	surface.generate_normals()
+	var mesh := surface.commit()
+	mesh.surface_set_material(0, _material(Color.WHITE, true))
+	return mesh
+
+
 static func _build_broadleaf_forest(parent: Node3D, root: Node) -> void:
 	var random := RandomNumberGenerator.new()
 	random.seed = 50439
@@ -355,6 +529,37 @@ static func _build_broadleaf_forest(parent: Node3D, root: Node) -> void:
 		var basis := Basis(Vector3.UP, random.randf_range(0.0, TAU)).scaled(Vector3(scale_value, scale_value, scale_value))
 		transforms.append(Transform3D(basis, Vector3(x, terrain_height(x, z) - 0.1, z)))
 	_add_multimesh(parent, root, "BroadleafForest", _broadleaf_tree_mesh(), transforms)
+
+
+static func _build_island_vegetation(parent: Node3D, root: Node) -> void:
+	var random := RandomNumberGenerator.new()
+	random.seed = 74152
+	var trees: Array[Transform3D] = []
+	var grasses: Array[Transform3D] = []
+	for index in range(65):
+		var z := random.randf_range(ISLAND_CENTER_Z - 25.0, ISLAND_CENTER_Z + 25.0)
+		var along := (z - ISLAND_CENTER_Z) / ISLAND_HALF_LENGTH
+		var width := ISLAND_HALF_WIDTH * sqrt(maxf(0.0, 1.0 - along * along))
+		var x := island_center(z) + random.randf_range(-0.68, 0.68) * width
+		var height := terrain_surface_height(x, z)
+		if height < WATER_LEVEL + 0.3:
+			continue
+		var size := random.randf_range(0.75, 1.18)
+		var basis := Basis(Vector3.UP, random.randf_range(0.0, TAU)).scaled(Vector3(size * 1.08, size * 0.86, size * 1.08))
+		trees.append(Transform3D(basis, Vector3(x, height - 0.05, z)))
+	for index in range(900):
+		var z := random.randf_range(ISLAND_CENTER_Z - 29.0, ISLAND_CENTER_Z + 29.0)
+		var along := (z - ISLAND_CENTER_Z) / ISLAND_HALF_LENGTH
+		var width := ISLAND_HALF_WIDTH * sqrt(maxf(0.0, 1.0 - along * along))
+		var x := island_center(z) + random.randf_range(-0.82, 0.82) * width
+		var height := terrain_surface_height(x, z)
+		if height < WATER_LEVEL + 0.2:
+			continue
+		var size := random.randf_range(0.35, 0.65)
+		var basis := Basis(Vector3.UP, random.randf_range(0.0, TAU)).scaled(Vector3.ONE * size)
+		grasses.append(Transform3D(basis, Vector3(x, height - 0.03, z)))
+	_add_multimesh(parent, root, "IslandTrees", _island_tree_mesh(), trees)
+	_add_multimesh(parent, root, "IslandUnderstory", _grass_mesh(), grasses)
 
 
 static func _build_village(world: Node3D, root: Node) -> void:
@@ -409,6 +614,8 @@ static func _build_trees(world: Node3D, root: Node) -> void:
 			x = river_center(z) + side * (river_width(z) + random.randf_range(6.0, 17.0))
 			if x > 4.0 and x < 58.0 and z > -72.0:
 				continue
+		if absf(x - river_center(z)) < river_width(z) + 1.0:
+			continue
 		var height := terrain_height(x, z)
 		_instance_model(trees, root, tree, "Tree%03d" % index, Vector3(x, height, z), random.randf_range(0.0, TAU), random.randf_range(0.9, 1.5))
 	for index in range(20):
@@ -416,6 +623,22 @@ static func _build_trees(world: Node3D, root: Node) -> void:
 		var x := river_center(z) - river_width(z) - random.randf_range(3.0, 12.0)
 		_instance_model(trees, root, bush, "Bush%02d" % index, Vector3(x, terrain_height(x, z), z), random.randf_range(0.0, TAU), random.randf_range(0.8, 1.5))
 	_build_broadleaf_forest(trees, root)
+	_build_island_vegetation(trees, root)
+
+
+static func rebuild_river_landscape(root: Node3D) -> void:
+	var world := root.get_node("FirstLevel") as Node3D
+	for node_name in ["WalkableTerrain", "WindingRiver", "RiverHighlights", "RiverShoreline", "WaterBoundary", "TallGrass", "RedPoppies", "SpawnRockLedge", "RidgeAndFieldRocks", "RockCollision", "RiverbankAndDistantTreeline"]:
+		var old_node := world.get_node_or_null(node_name)
+		if old_node != null:
+			old_node.free()
+	_build_terrain(world, root)
+	_build_river(world, root)
+	_build_field(world, root)
+	_build_rocks(world, root)
+	_build_trees(world, root)
+	var player := root.get_node("Player") as CharacterBody3D
+	player.collision_mask |= 4
 
 
 static func _build_atmosphere(world: Node3D, root: Node) -> void:
@@ -479,8 +702,8 @@ static func _build_atmosphere(world: Node3D, root: Node) -> void:
 static func _lighting(root: Node3D) -> void:
 	var sun := root.get_node("Sun") as DirectionalLight3D
 	sun.rotation_degrees = Vector3(-7.0, 172.0, 0.0)
-	sun.light_color = Color(1.0, 0.66, 0.43)
-	sun.light_energy = 1.25
+	sun.light_color = Color(1.0, 0.72, 0.48)
+	sun.light_energy = 1.6
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 120.0
 	var sky := Sky.new()
@@ -491,12 +714,16 @@ static func _lighting(root: Node3D) -> void:
 	environment.background_mode = Environment.BG_SKY
 	environment.sky = sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.52, 0.48, 0.45)
-	environment.ambient_light_energy = 0.38
+	environment.ambient_light_color = Color(0.62, 0.60, 0.65)
+	environment.ambient_light_energy = 0.55
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.glow_enabled = true
+	environment.glow_intensity = 0.35
+	environment.glow_hdr_threshold = 1.1
 	environment.fog_enabled = true
-	environment.fog_light_color = Color(0.49, 0.31, 0.26)
-	environment.fog_density = 0.004
+	environment.fog_light_color = Color(0.61, 0.39, 0.32)
+	environment.fog_density = 0.0045
+	environment.fog_sun_scatter = 0.05
 	environment.fog_sky_affect = 0.05
 	(root.get_node("WorldEnvironment") as WorldEnvironment).environment = environment
 
@@ -522,6 +749,7 @@ static func build(root: Node3D) -> void:
 	_build_atmosphere(world, root)
 	_lighting(root)
 	var player := root.get_node("Player") as CharacterBody3D
+	player.collision_mask |= 4
 	player.position = Vector3(0.0, terrain_height(0.0, 12.0) + 0.12, 12.0)
 	player.set("camera_distance", 3.1)
 	player.set("camera_height", 1.65)
