@@ -188,7 +188,17 @@ static func _filter_road_multimesh(instance: MultiMeshInstance3D, clearance: flo
 	return true
 
 
+static func _can_rebuild_in_place(root: Node3D) -> bool:
+	var world := root.get_node_or_null("FirstLevel")
+	if world != null and not world.scene_file_path.is_empty():
+		push_error("Level builder: FirstLevel is an instanced region; legacy rebuilds would overwrite the split scenes. Build in a separate scratch scene instead.")
+		return false
+	return true
+
+
 static func build_road(root: Node3D) -> void:
+	if not _can_rebuild_in_place(root):
+		return
 	var world := root.get_node("FirstLevel") as Node3D
 	var old_road := world.get_node_or_null("StrongholdRoad")
 	if old_road != null:
@@ -885,6 +895,8 @@ static func _build_trees(world: Node3D, root: Node) -> void:
 
 
 static func rebuild_river_landscape(root: Node3D) -> void:
+	if not _can_rebuild_in_place(root):
+		return
 	var world := root.get_node("FirstLevel") as Node3D
 	for node_name in ["WalkableTerrain", "WindingRiver", "RiverHighlights", "RiverShoreline", "WaterBoundary", "TallGrass", "RedPoppies", "SpawnRockLedge", "RidgeAndFieldRocks", "RockCollision", "RiverbankAndDistantTreeline"]:
 		var old_node := world.get_node_or_null(node_name)
@@ -984,6 +996,8 @@ static func _lighting(root: Node3D) -> void:
 
 
 static func build(root: Node3D) -> void:
+	if not _can_rebuild_in_place(root):
+		return
 	var old_ground := root.get_node_or_null("TestGround")
 	if old_ground != null:
 		root.remove_child(old_ground)

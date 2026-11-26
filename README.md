@@ -25,10 +25,41 @@ Jolt 3D physics.
 
 ## Project layout
 
-- `scenes/` contains the main scene and future character, world, and UI scenes.
-- `scripts/` holds future character, world, and UI GDScript code.
-- `assets/` holds future models, textures, and audio used by the game.
-- `project.godot` contains the project and engine settings.
+- `scenes/main.tscn` assembles the characters, lighting, region and map. Character spawn positions live here.
+- `scenes/characters/` contains the reusable player and horse scenes; their scripts are in `scripts/characters/`.
+- `scenes/world/sun.tscn` and `scenes/world/world_environment.tscn` contain shared lighting and sky settings.
+- `scenes/world/great_meadow/region.tscn` assembles the existing area. Its terrain, river pieces, stronghold, forest, road, grass, poppies and atmosphere are separate scenes in the same folder. Rocks and their collision remain in the region scene.
+- `scenes/ui/world_map.tscn` and `scripts/ui/` contain the world map.
+- `assets/` holds models, textures and other source assets; `project.godot` contains project settings.
+
+## Working on the world together
+
+Open a component's own scene to edit it, rather than making local overrides in
+`main.tscn` or `region.tscn`. Teammates can work in different component scenes
+at the same time; agree on one owner for any shared scene while it is being
+edited. Coordinate changes to the region assembly, character spawns, lighting,
+and `project.godot` separately. The river's surface, highlights, shoreline and
+water collision are separate files, so coordinate changes across them. When
+changing rocks, keep the visuals and collision together.
+
+The current meadow is one bounded region, not a streamed world. To expand it,
+add neighboring region scenes in their own folders and instance them into the
+world assembly. Agree on world coordinates and matching terrain heights at
+shared edges; also connect roads, rivers, vegetation and collision across those
+edges. The current terrain was sampled on a 2.5-unit grid and covers X -100 to
+100 and Z -155 to 35. The world map has fixed bounds in
+`scripts/ui/world_map.gd`; update its framing when the playable world grows.
+
+For much larger worlds, plan region loading and unloading, terrain chunking,
+level of detail, and testing of collision and transitions before expanding
+indefinitely. None of those streaming features is implemented yet. The existing
+terrain, road and grass scenes still contain large baked data and should each
+have one editor at a time.
+
+`scripts/world/level_builder.gd` is the legacy generator used for the original
+monolithic scene. Its rebuild entry points reject the assembled instanced region
+to avoid replacing the split scenes. Use a separate scratch scene for legacy
+generation; adapting it to build individual regions is future work.
 
 ## The walk clip
 

@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://dpqhrehxa4jen"]
+
+[ext_resource type="Script" uid="uid://btjmvy10giyms" path="res://scripts/characters/horse.gd" id="1_rb3we"]
+[ext_resource type="PackedScene" path="res://assets/models/draft_horse/character.tscn" id="2_46ivy"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_trceg"]
+radius = 0.55
+height = 1.65
+
+[node name="Horse" type="CharacterBody3D" unique_id=791522212]
+collision_layer = 4
+script = ExtResource("1_rb3we")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1282895555]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.825, 0)
+shape = SubResource("CapsuleShape3D_trceg")
+
+[node name="Character" parent="." unique_id=555487848 instance=ExtResource("2_46ivy")]

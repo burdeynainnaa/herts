@@ -1,0 +1,37 @@
+[gd_scene format=3 uid="uid://bi2o7vngufbve"]
+
+[ext_resource type="Script" uid="uid://lsfq7xktvo0t" path="res://scripts/characters/player.gd" id="1_yewv4"]
+[ext_resource type="PackedScene" uid="uid://bq1s4h564dj1j" path="res://assets/models/herts_cossack_reference/character.tscn" id="2_76oj4"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_jyhfs"]
+radius = 0.4
+height = 1.8
+
+[node name="Player" type="CharacterBody3D" unique_id=1490605642]
+collision_layer = 2
+collision_mask = 5
+script = ExtResource("1_yewv4")
+character_manifest_path = "res://assets/models/herts_cossack_reference/character.json"
+relax_idle_right_arm = true
+character_tint = Color(0.57, 0.62, 0.67, 1)
+camera_height = 1.65
+camera_distance = 3.1
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=2039648324]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_jyhfs")
+
+[node name="CharacterRotationRoot" type="Node3D" parent="." unique_id=302012403]
+
+[node name="Character" parent="CharacterRotationRoot" unique_id=145045063 instance=ExtResource("2_76oj4")]
+
+[node name="CameraYaw" type="Node3D" parent="." unique_id=567024305]
+
+[node name="CameraPitch" type="Node3D" parent="CameraYaw" unique_id=1659713142]
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraYaw/CameraPitch" unique_id=2072108549]
+spring_length = 2.9
+
+[node name="Camera3D" type="Camera3D" parent="CameraYaw/CameraPitch/SpringArm3D" unique_id=2053573022]
+current = true
+fov = 60.0

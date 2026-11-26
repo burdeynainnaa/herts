@@ -1,0 +1,28 @@
+[gd_scene format=3 uid="uid://cttabhg4grcrd"]
+
+[ext_resource type="Shader" uid="uid://dl5bbggk0d4ej" path="res://scripts/world/sunset_sky.gdshader" id="1_0uvxl"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_85g3d"]
+shader = ExtResource("1_0uvxl")
+
+[sub_resource type="Sky" id="Sky_choun"]
+sky_material = SubResource("ShaderMaterial_85g3d")
+
+[sub_resource type="Environment" id="Environment_ya4ey"]
+background_mode = 2
+sky = SubResource("Sky_choun")
+ambient_light_source = 2
+ambient_light_color = Color(0.52, 0.48, 0.45, 1)
+ambient_light_energy = 0.38
+tonemap_mode = 2
+glow_enabled = true
+glow_intensity = 0.35
+glow_hdr_threshold = 1.1
+fog_enabled = true
+fog_light_color = Color(0.49, 0.31, 0.26, 1)
+fog_sun_scatter = 0.05
+fog_density = 0.004
+fog_sky_affect = 0.05
+
+[node name="WorldEnvironment" type="WorldEnvironment" unique_id=1738822275]
+environment = SubResource("Environment_ya4ey")
