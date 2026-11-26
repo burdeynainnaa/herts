@@ -1,5 +1,7 @@
 [gd_scene format=4 uid="uid://be3t4kdosc1ym"]
 
+[ext_resource type="Material" path="res://scenes/world/great_meadow/river_water.tres" id="1_river"]
+
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_eb6dy"]
 cull_mode = 2
 shading_mode = 0
@@ -18,4 +20,5 @@ _surfaces = [{
 }]
 
 [node name="WindingRiver" type="MeshInstance3D" unique_id=1597943964]
+material_override = ExtResource("1_river")
 mesh = SubResource("ArrayMesh_trceg")

@@ -328,6 +328,7 @@ static func _build_river(world: Node3D, root: Node) -> void:
 	var water := MeshInstance3D.new()
 	water.name = "WindingRiver"
 	water.mesh = mesh
+	water.material_override = load("res://scenes/world/great_meadow/river_water.tres")
 	_owned(world, water, root)
 	var ripples := SurfaceTool.new()
 	ripples.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -350,6 +351,7 @@ static func _build_river(world: Node3D, root: Node) -> void:
 	var highlights := MeshInstance3D.new()
 	highlights.name = "RiverHighlights"
 	highlights.mesh = ripple_mesh
+	highlights.visible = false
 	_owned(world, highlights, root)
 	_build_shores(world, root)
 

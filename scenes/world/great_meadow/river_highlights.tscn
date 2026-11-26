@@ -17,4 +17,5 @@ _surfaces = [{
 }]
 
 [node name="RiverHighlights" type="MeshInstance3D" unique_id=2101959663]
+visible = false
 mesh = SubResource("ArrayMesh_jkv2x")
