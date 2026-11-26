@@ -2,6 +2,15 @@ extends CharacterBody3D
 
 const WALK_LEG_PHASES: Array[float] = [0.25, 0.75, 0.0, 0.5]
 const GALLOP_LEG_PHASES: Array[float] = [0.3, 0.42, 0.0, 0.12]
+const HOOF_LEG_ORDER: Array[int] = [0, 1, 3, 2]
+const HOOF_FALLBACK_OFFSETS: Array[Vector3] = [
+	Vector3(-0.17, 0.0, -0.38),
+	Vector3(0.17, 0.0, -0.38),
+	Vector3(0.17, 0.0, 0.62),
+	Vector3(-0.17, 0.0, 0.62),
+]
+const SUPPORT_PROBE_REACH: float = 0.8
+const MAX_SUPPORT_TILT_DEGREES: float = 45.0
 
 @export var walk_speed: float = 3.2
 @export var run_speed: float = 8.0
@@ -9,6 +18,7 @@ const GALLOP_LEG_PHASES: Array[float] = [0.3, 0.42, 0.0, 0.12]
 @export var turn_speed: float = 7.0
 @export var walk_stride_length: float = 1.8
 @export var run_stride_length: float = 3.4
+@export var slope_align_speed: float = 10.0
 
 var mounted: bool = false
 var gait: StringName = &"idle"
@@ -21,18 +31,24 @@ var _walk_weight: float = 0.0
 var _run_weight: float = 0.0
 var _idle_time: float = 0.0
 var _rig: HorseQuadrupedRig
+var _visual: Node3D
 
 
 func _ready() -> void:
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity"))
 	floor_snap_length = 0.4
-	var model := $Character as Node3D
+	_visual = get_node_or_null(^"Visual") as Node3D
+	if _visual == null:
+		return
+	var model := _visual.get_node_or_null(^"Character") as Node3D
+	if model == null:
+		return
 	var meshes: Array[Node] = model.find_children("*", "MeshInstance3D", true, false)
 	if meshes.is_empty():
 		return
 	_rig = HorseQuadrupedRig.new()
 	_rig.name = "QuadrupedRig"
-	add_child(_rig)
+	_visual.add_child(_rig)
 	if _rig.build_from(meshes[0] as MeshInstance3D, self):
 		model.visible = false
 	else:
@@ -47,6 +63,7 @@ func _physics_process(delta: float) -> void:
 	velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
 	_apply_gravity(delta)
 	move_and_slide()
+	_update_slope_tilt(delta)
 	_update_gait(delta, &"idle")
 
 
@@ -57,6 +74,7 @@ func ride(direction: Vector3, sprinting: bool, delta: float) -> void:
 	velocity.z = move_toward(velocity.z, target_velocity.z, acceleration * delta)
 	_apply_gravity(delta)
 	move_and_slide()
+	_update_slope_tilt(delta)
 	if direction.length_squared() > 0.0001:
 		var target_yaw := atan2(-direction.x, -direction.z)
 		rotation.y = lerp_angle(rotation.y, target_yaw, 1.0 - exp(-turn_speed * delta))
@@ -72,6 +90,85 @@ func _apply_gravity(delta: float) -> void:
 		velocity.y = -0.5
 	else:
 		velocity.y -= _gravity * delta
+
+
+func _update_slope_tilt(delta: float) -> void:
+	if _visual == null:
+		return
+	var weight: float = 1.0 - exp(-slope_align_speed * delta)
+	_visual.quaternion = _visual.quaternion.slerp(_tilt_basis_for(_support_up()).get_rotation_quaternion(), weight)
+
+
+func _support_up() -> Vector3:
+	var space := get_world_3d().direct_space_state
+	var horse_basis := global_transform.basis
+	var points: Array[Vector3] = []
+	var normals: Array[Vector3] = []
+	for offset in _hoof_offsets():
+		var origin: Vector3 = global_position + horse_basis * (offset + Vector3.UP * SUPPORT_PROBE_REACH)
+		var query := PhysicsRayQueryParameters3D.create(
+			origin, origin - Vector3.UP * SUPPORT_PROBE_REACH * 2.0, collision_mask, [get_rid()]
+		)
+		var hit := space.intersect_ray(query)
+		if hit.is_empty():
+			continue
+		var normal: Vector3 = hit["normal"]
+		if normal.dot(Vector3.UP) < 0.2:
+			continue
+		points.append(hit["position"])
+		normals.append(normal)
+	var up := Vector3.ZERO
+	if points.size() >= 3:
+		var center := Vector3.ZERO
+		for point in points:
+			center += point
+		center /= float(points.size())
+		for index in points.size():
+			var next: Vector3 = points[(index + 1) % points.size()]
+			up += (points[index] - center).cross(next - center)
+	if up.length_squared() < 0.000001:
+		for normal in normals:
+			up += normal
+	if up.length_squared() < 0.000001:
+		return get_floor_normal() if is_on_floor() else Vector3.UP
+	up = up.normalized()
+	if up.y < 0.0:
+		up = -up
+	return _limit_support_tilt(up)
+
+
+func _limit_support_tilt(up: Vector3) -> Vector3:
+	var angle: float = up.angle_to(Vector3.UP)
+	var limit: float = deg_to_rad(MAX_SUPPORT_TILT_DEGREES)
+	if angle <= limit:
+		return up
+	return Vector3.UP.slerp(up, limit / angle)
+
+
+func _hoof_offsets() -> Array[Vector3]:
+	if _rig == null or _rig.hoof_bones.size() < 4:
+		return HOOF_FALLBACK_OFFSETS
+	var offsets: Array[Vector3] = []
+	for leg in HOOF_LEG_ORDER:
+		var origin: Vector3 = _rig.get_bone_global_rest(_rig.hoof_bones[leg]).origin
+		offsets.append(Vector3(origin.x, 0.0, origin.z))
+	return offsets
+
+
+func _tilt_basis_for(up: Vector3) -> Basis:
+	var local_up: Vector3 = (global_transform.basis.inverse() * up).normalized()
+	var forward: Vector3 = Vector3.FORWARD - local_up * Vector3.FORWARD.dot(local_up)
+	if forward.length_squared() < 0.0001:
+		return Basis.IDENTITY
+	forward = forward.normalized()
+	var back: Vector3 = -forward
+	return Basis(local_up.cross(back), local_up, back)
+
+
+func get_visual_global_basis() -> Basis:
+	if _visual == null:
+		return global_transform.basis
+	return global_transform.basis * _visual.basis
 
 
 func _update_gait(delta: float, next_gait: StringName) -> void:

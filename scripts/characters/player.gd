@@ -219,11 +219,13 @@ func _ride_horse(delta: float) -> void:
 	_horse.ride(direction, Input.is_action_pressed(&"sprint"), delta)
 	global_position = _horse.global_position
 	var seat_weight: float = _riding_modifier.influence if _riding_modifier != null else 1.0
+	var saddle_basis: Basis = _horse.get_visual_global_basis()
 	var seat := Vector3(0.0, ride_seat_height + float(_horse.saddle_offset), -ride_seat_forward)
-	_visual_root.position = seat * seat_weight
-	_visual_root.rotation = Vector3(
-		float(_horse.saddle_pitch) * seat_weight, _horse.rotation.y, float(_horse.saddle_roll) * seat_weight
-	)
+	_visual_root.position = (saddle_basis * seat) * seat_weight
+	var saddle_pose := Basis.from_euler(Vector3(
+		float(_horse.saddle_pitch) * seat_weight, 0.0, float(_horse.saddle_roll) * seat_weight
+	))
+	_visual_root.basis = saddle_basis * saddle_pose
 	if global_position.y < respawn_below_y:
 		_horse.global_position = _spawn_position
 		_horse.velocity = Vector3.ZERO

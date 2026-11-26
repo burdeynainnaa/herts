@@ -15,4 +15,6 @@ script = ExtResource("1_rb3we")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.825, 0)
 shape = SubResource("CapsuleShape3D_trceg")
 
-[node name="Character" parent="." unique_id=555487848 instance=ExtResource("2_46ivy")]
+[node name="Visual" type="Node3D" parent="." unique_id=1794861231]
+
+[node name="Character" parent="Visual" unique_id=555487848 instance=ExtResource("2_46ivy")]
