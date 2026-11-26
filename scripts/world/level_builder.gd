@@ -109,6 +109,32 @@ static func _distance_to_road(point: Vector2) -> float:
 	return sqrt(closest)
 
 
+static func terrain_normal(x: float, z: float) -> Vector3:
+	x = clampf(x, WORLD_MIN_X, WORLD_MAX_X - 0.001)
+	z = clampf(z, WORLD_MIN_Z, WORLD_MAX_Z - 0.001)
+	var cell_x := WORLD_MIN_X + floorf((x - WORLD_MIN_X) / TERRAIN_STEP) * TERRAIN_STEP
+	var cell_z := WORLD_MIN_Z + floorf((z - WORLD_MIN_Z) / TERRAIN_STEP) * TERRAIN_STEP
+	var across := (x - cell_x) / TERRAIN_STEP
+	var along := (z - cell_z) / TERRAIN_STEP
+	var a := terrain_height(cell_x, cell_z)
+	var b := terrain_height(cell_x + TERRAIN_STEP, cell_z)
+	var c := terrain_height(cell_x, cell_z + TERRAIN_STEP)
+	var d := terrain_height(cell_x + TERRAIN_STEP, cell_z + TERRAIN_STEP)
+	var normal: Vector3
+	if across + along <= 1.0:
+		normal = Vector3(TERRAIN_STEP, b - a, 0.0).cross(Vector3(0.0, c - a, TERRAIN_STEP))
+	else:
+		normal = Vector3(0.0, d - b, TERRAIN_STEP).cross(Vector3(-TERRAIN_STEP, c - b, TERRAIN_STEP))
+	if normal.y < 0.0:
+		normal = -normal
+	return normal.normalized()
+
+
+static func _surface_basis(position: Vector3, yaw: float, size: Vector3) -> Basis:
+	var flat := Basis(Vector3.UP, yaw).scaled(size)
+	return Basis(Quaternion(Vector3.UP, terrain_normal(position.x, position.z))) * flat
+
+
 static func _road_curve(points: Array) -> Curve2D:
 	var curve := Curve2D.new()
 	curve.bake_interval = 0.3
@@ -544,8 +570,9 @@ static func _build_rocks(world: Node3D, root: Node) -> void:
 	_owned(world, ledge, root)
 	for point in [Vector3(-7, 0, 12), Vector3(-5, 0, 8), Vector3(-2, 0, 8), Vector3(3, 0, 8), Vector3(5, 0, 8), Vector3(8, 0, 12), Vector3(-9, 0, 5), Vector3(7, 0, 4)]:
 		var size := random.randf_range(1.1, 2.2)
-		var basis := Basis(Vector3.UP, random.randf_range(0.0, TAU)).scaled(Vector3(size * 1.5, size * 0.5, size))
-		transforms.append(Transform3D(basis, Vector3(point.x, terrain_height(point.x, point.z) - 0.22, point.z)))
+		var yaw := random.randf_range(0.0, TAU)
+		var position := Vector3(point.x, terrain_height(point.x, point.z) - 0.22, point.z)
+		transforms.append(Transform3D(_surface_basis(position, yaw, Vector3(size * 1.5, size * 0.5, size)), position))
 	for index in range(90):
 		var x := random.randf_range(-62.0, 65.0)
 		var z := random.randf_range(-58.0, 28.0)
@@ -554,8 +581,9 @@ static func _build_rocks(world: Node3D, root: Node) -> void:
 		if x > 7.0 and x < 53.0 and z < -25.0 and z > -70.0:
 			continue
 		var size := random.randf_range(0.5, 2.0)
-		var basis := Basis(Vector3.UP, random.randf_range(0.0, TAU)).scaled(Vector3(size * 1.4, size * 0.55, size))
-		transforms.append(Transform3D(basis, Vector3(x, terrain_height(x, z) - 0.1, z)))
+		var yaw := random.randf_range(0.0, TAU)
+		var position := Vector3(x, terrain_height(x, z) - 0.1, z)
+		transforms.append(Transform3D(_surface_basis(position, yaw, Vector3(size * 1.4, size * 0.55, size)), position))
 	_add_multimesh(world, root, "RidgeAndFieldRocks", _rock_mesh(), transforms)
 	add_rock_collision(world, root)
 
