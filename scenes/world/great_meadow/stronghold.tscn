@@ -9,6 +9,7 @@
 [ext_resource type="PackedScene" uid="uid://bdd24vh1ls5ln" path="res://assets/library/survival-camp-stronghold/torch.glb" id="7_quwca"]
 [ext_resource type="PackedScene" uid="uid://dl236yf26m02b" path="res://scenes/world/vfx/torch_flame.tscn" id="8_quwca"]
 [ext_resource type="PackedScene" uid="uid://de05f6rkggbt4" path="res://scenes/world/vfx/bonfire.tscn" id="12_iwmju"]
+[ext_resource type="PackedScene" path="res://scenes/world/cavalry_standard.tscn" id="10_tmyal"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_jkv2x"]
 size = Vector3(2.12, 3.4, 0.55)
@@ -1021,3 +1022,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 33, 2.6, -24.1)
 
 [node name="CourtyardBonfire" parent="." unique_id=764049484 instance=ExtResource("12_iwmju")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28.5, 0.75, -44)
+
+[node name="GateStandard" parent="." unique_id=1032936229 instance=ExtResource("10_tmyal")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 26.1, 0.95, -22.4)

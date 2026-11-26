@@ -10,7 +10,8 @@ game UI. The Summer board contains the current design and visual references.
 
 The main scene has an animated Cossack and a third-person movement controller.
 The first area starts on a rocky ridge above a poppy field, a winding river and
-a palisaded timber village at sunset. Combat and UI come later. The original
+a palisaded timber village at sunset, with a crimson cavalry standard flying at
+the outpost gate. Combat and UI come later. The original
 Summer starter scene remains at `main.tscn` as a reference.
 
 ## Open and run
@@ -30,6 +31,8 @@ Jolt 3D physics.
 - `scenes/world/sun.tscn` and `scenes/world/world_environment.tscn` contain shared lighting and sky settings.
 - `scenes/world/great_meadow/region.tscn` assembles the existing area. Its terrain, river pieces, stronghold, forest, road, grass, poppies and atmosphere are separate scenes in the same folder. Rocks and their collision remain in the region scene.
 - `scenes/ui/world_map.tscn` and `scripts/ui/` contain the world map.
+- `scenes/world/cavalry_standard.tscn` is the gate banner (pole, cloth, collision);
+  `scripts/world/flag_wave.gdshader` waves the cloth from the hoist out.
 - `assets/` holds models, textures and other source assets; `project.godot` contains project settings.
 
 ## Working on the world together
