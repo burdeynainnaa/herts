@@ -31,6 +31,10 @@ const RUN_OVERRIDE_CLIP: StringName = &"RunSprint"
 @export var min_animation_speed: float = 0.6
 @export var max_animation_speed: float = 1.5
 
+@export_category("Riding")
+@export var ride_seat_height: float = 0.455
+@export var ride_seat_forward: float = 0.0
+
 @export_category("Camera")
 @export var mouse_sensitivity: float = 0.002
 @export var camera_height: float = 1.25
@@ -70,6 +74,7 @@ var _normal_collision_mask: int
 
 
 func _ready() -> void:
+	process_priority = 50
 	if not _validate_scene_contract() or not _configure_character_animation():
 		return
 	var character_mesh := get_node_or_null("CharacterRotationRoot/Character/Visual/Armature/Skeleton3D/char1") as MeshInstance3D
@@ -109,6 +114,11 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _riding_modifier != null:
+		_riding_modifier.influence = move_toward(
+			_riding_modifier.influence, 1.0 if _mounted else 0.0, delta / maxf(animation_blend_time, 0.001)
+		)
+		_riding_modifier.apply_pose(_riding_modifier.influence)
 	if _camera_yaw == null:
 		return
 	var target := _camera_target_position()
@@ -117,10 +127,6 @@ func _process(delta: float) -> void:
 		var target_influence := 1.0 if _active_role == &"idle" and not _mounted else 0.0
 		_idle_arm_modifier.influence = move_toward(
 			_idle_arm_modifier.influence, target_influence, delta / maxf(animation_blend_time, 0.001)
-		)
-	if _riding_modifier != null:
-		_riding_modifier.influence = move_toward(
-			_riding_modifier.influence, 1.0 if _mounted else 0.0, delta / maxf(animation_blend_time, 0.001)
 		)
 
 
@@ -212,8 +218,12 @@ func _ride_horse(delta: float) -> void:
 		direction = direction.normalized()
 	_horse.ride(direction, Input.is_action_pressed(&"sprint"), delta)
 	global_position = _horse.global_position
-	_visual_root.rotation.y = _horse.rotation.y
-	_visual_root.position.y = 0.58 + float(_horse.saddle_offset)
+	var seat_weight: float = _riding_modifier.influence if _riding_modifier != null else 1.0
+	var seat := Vector3(0.0, ride_seat_height + float(_horse.saddle_offset), -ride_seat_forward)
+	_visual_root.position = seat * seat_weight
+	_visual_root.rotation = Vector3(
+		float(_horse.saddle_pitch) * seat_weight, _horse.rotation.y, float(_horse.saddle_roll) * seat_weight
+	)
 	if global_position.y < respawn_below_y:
 		_horse.global_position = _spawn_position
 		_horse.velocity = Vector3.ZERO
@@ -245,7 +255,8 @@ func _dismount() -> void:
 		global_position = landing
 		collision_layer = _normal_collision_layer
 		collision_mask = _normal_collision_mask
-		_visual_root.position.y = 0.0
+		_visual_root.position = Vector3.ZERO
+		_visual_root.rotation = Vector3(0.0, _visual_root.rotation.y, 0.0)
 		_spring_arm.spring_length = camera_distance
 		return
 

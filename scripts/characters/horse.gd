@@ -14,6 +14,8 @@ var mounted: bool = false
 var gait: StringName = &"idle"
 var gait_phase: float = 0.0
 var saddle_offset: float = 0.0
+var saddle_pitch: float = 0.0
+var saddle_roll: float = 0.0
 var _gravity: float = 9.8
 var _walk_weight: float = 0.0
 var _run_weight: float = 0.0
@@ -85,6 +87,8 @@ func _update_gait(delta: float, next_gait: StringName) -> void:
 	_idle_time += delta
 	if _rig == null:
 		saddle_offset = 0.0
+		saddle_pitch = 0.0
+		saddle_roll = 0.0
 		return
 
 	for leg in 4:
@@ -106,6 +110,8 @@ func _update_gait(delta: float, next_gait: StringName) -> void:
 	var tail_swish: float = 0.12 * sin(cycle) * moving + 0.06 * sin(_idle_time * 0.9) * (1.0 - moving)
 	_rig.set_tail(-0.35 * _run_weight - 0.05 * _walk_weight, tail_swish)
 	saddle_offset = bob
+	saddle_pitch = pitch
+	saddle_roll = roll
 
 
 func _leg_pose(local_phase: float, stance: float, amplitude: float, flex: float, leg: int) -> Vector3:
