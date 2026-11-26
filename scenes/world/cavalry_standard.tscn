@@ -1,0 +1,67 @@
+[gd_scene format=3]
+
+[ext_resource type="Shader" path="res://scripts/world/flag_wave.gdshader" id="2_shader"]
+[ext_resource type="Texture2D" path="res://assets/textures/cavalry_standard.png" id="3_texture"]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_staff"]
+top_radius = 0.042
+bottom_radius = 0.062
+height = 6.0
+radial_segments = 10
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_staff"]
+albedo_color = Color(0.28, 0.19, 0.12, 1)
+roughness = 0.92
+
+[sub_resource type="SphereMesh" id="SphereMesh_finial"]
+radius = 0.075
+height = 0.15
+radial_segments = 12
+rings = 6
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_finial"]
+albedo_color = Color(0.64, 0.5, 0.26, 1)
+metallic = 0.85
+roughness = 0.38
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_flag"]
+shader = ExtResource("2_shader")
+shader_parameter/flag_texture = ExtResource("3_texture")
+shader_parameter/wave_speed = 1.35
+shader_parameter/wave_strength = 0.07
+shader_parameter/ripple_strength = 0.022
+shader_parameter/fly_droop = 0.06
+shader_parameter/backlight_amount = 0.3
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_cloth"]
+size = Vector2(1.35, 1.104)
+subdivide_width = 30
+subdivide_depth = 24
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_staff"]
+height = 6.0
+radius = 0.1
+
+[node name="CavalryStandard" type="Node3D"]
+
+[node name="Staff" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+mesh = SubResource("CylinderMesh_staff")
+surface_material_override/0 = SubResource("StandardMaterial3D_staff")
+
+[node name="Finial" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.06, 0)
+mesh = SubResource("SphereMesh_finial")
+surface_material_override/0 = SubResource("StandardMaterial3D_finial")
+
+[node name="Cloth" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0.71, 5.39, 0)
+mesh = SubResource("PlaneMesh_cloth")
+material_override = SubResource("ShaderMaterial_flag")
+
+[node name="StaffBody" type="StaticBody3D" parent="."]
+
+[node name="Collision" type="CollisionShape3D" parent="StaffBody"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+shape = SubResource("CylinderShape3D_staff")
