@@ -7,6 +7,12 @@
 [ext_resource type="PackedScene" uid="uid://b41g88kw0f685" path="res://assets/library/survival-camp-stronghold/anvil.glb" id="5_vqfew"]
 [ext_resource type="PackedScene" uid="uid://djn4ionglwf14" path="res://assets/library/survival-camp-stronghold/crock-pot.glb" id="6_5ny37"]
 [ext_resource type="PackedScene" uid="uid://bdd24vh1ls5ln" path="res://assets/library/survival-camp-stronghold/torch.glb" id="7_quwca"]
+[ext_resource type="PackedScene" uid="uid://dl236yf26m02b" path="res://scenes/world/vfx/torch_flame.tscn" id="8_quwca"]
+[ext_resource type="Texture2D" uid="uid://dra8q7byo66oi" path="res://assets/vfx/flame_soft.png" id="9_rjl4m"]
+[ext_resource type="Texture2D" uid="uid://crh6dbsx3knik" path="res://assets/vfx/ember_soft.png" id="10_6fae0"]
+[ext_resource type="Script" uid="uid://b8lb68w6wpip7" path="res://scripts/world/fire_flicker.gd" id="11_cr8dy"]
+[ext_resource type="PackedScene" uid="uid://de05f6rkggbt4" path="res://scenes/world/vfx/bonfire.tscn" id="12_iwmju"]
+[ext_resource type="Texture2D" uid="uid://c2k45pxu8y5jv" path="res://assets/vfx/smoke_soft.png" id="13_33b85"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_jkv2x"]
 size = Vector3(2.12, 3.4, 0.55)
@@ -246,6 +252,304 @@ size = Vector3(6.5519996, 3.5099998, 5.85)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_63lxy"]
 size = Vector3(5.8799996, 3.1499999, 5.25)
+
+[sub_resource type="Gradient" id="Gradient_3xay7"]
+offsets = PackedFloat32Array(0, 0.24, 0.62, 1)
+colors = PackedColorArray(1, 0.95, 0.78, 1, 1, 0.66, 0.2, 1, 1, 0.28, 0.04, 0.85, 0.6, 0.06, 0, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_2pevv"]
+gradient = SubResource("Gradient_3xay7")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_oltjf"]
+emission_shape = 1
+emission_sphere_radius = 0.07
+angle_min = -5.0
+angle_max = 5.0
+direction = Vector3(0, 1, 0)
+spread = 13.0
+initial_velocity_min = 0.5
+initial_velocity_max = 0.95
+gravity = Vector3(0, 0.9, 0)
+scale_min = 0.8
+scale_max = 1.2
+color_ramp = SubResource("GradientTexture1D_2pevv")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kd0t8"]
+transparency = 1
+blend_mode = 1
+cull_mode = 2
+depth_draw_mode = 2
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(1.55, 1.3, 1.05, 1)
+albedo_texture = ExtResource("9_rjl4m")
+disable_receive_shadows = true
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="QuadMesh_2lrev"]
+material = SubResource("StandardMaterial3D_kd0t8")
+size = Vector2(0.3, 0.58)
+
+[sub_resource type="Gradient" id="Gradient_pc4qb"]
+offsets = PackedFloat32Array(0, 0.35, 0.78, 1)
+colors = PackedColorArray(1, 1, 0.9, 1, 1, 0.88, 0.45, 1, 1, 0.52, 0.1, 0.75, 1, 0.22, 0.02, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_q855i"]
+gradient = SubResource("Gradient_pc4qb")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_qhfba"]
+emission_shape = 1
+emission_sphere_radius = 0.045
+angle_min = -3.0
+angle_max = 3.0
+direction = Vector3(0, 1, 0)
+spread = 7.0
+initial_velocity_min = 0.6
+initial_velocity_max = 1.1
+gravity = Vector3(0, 0.8, 0)
+scale_min = 0.7
+color_ramp = SubResource("GradientTexture1D_q855i")
+
+[sub_resource type="QuadMesh" id="QuadMesh_5r41h"]
+material = SubResource("StandardMaterial3D_kd0t8")
+size = Vector2(0.17, 0.34)
+
+[sub_resource type="Gradient" id="Gradient_87o7p"]
+offsets = PackedFloat32Array(0, 0.4, 1)
+colors = PackedColorArray(1, 0.92, 0.55, 1, 1, 0.48, 0.1, 0.85, 0.8, 0.12, 0, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_sp4k4"]
+gradient = SubResource("Gradient_87o7p")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_40uqj"]
+emission_shape = 1
+emission_sphere_radius = 0.12
+direction = Vector3(0, 1, 0)
+spread = 32.0
+initial_velocity_min = 0.55
+initial_velocity_max = 1.35
+gravity = Vector3(0, 0.35, 0)
+scale_min = 0.55
+color_ramp = SubResource("GradientTexture1D_sp4k4")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_m1uqh"]
+transparency = 1
+blend_mode = 1
+cull_mode = 2
+depth_draw_mode = 2
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(1.7, 1.35, 0.8, 1)
+albedo_texture = ExtResource("10_6fae0")
+disable_receive_shadows = true
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="QuadMesh_ejnm7"]
+material = SubResource("StandardMaterial3D_m1uqh")
+size = Vector2(0.055, 0.055)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fevy1"]
+albedo_color = Color(0.1, 0.085, 0.075, 1)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_gfu7w"]
+material = SubResource("StandardMaterial3D_fevy1")
+top_radius = 1.02
+bottom_radius = 1.08
+height = 0.05
+radial_segments = 24
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_u30yt"]
+albedo_color = Color(0.33, 0.3, 0.27, 1)
+roughness = 0.96
+
+[sub_resource type="SphereMesh" id="SphereMesh_0g43x"]
+material = SubResource("StandardMaterial3D_u30yt")
+radius = 0.24
+height = 0.4
+radial_segments = 7
+rings = 4
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ivwea"]
+albedo_color = Color(0.16, 0.095, 0.055, 1)
+roughness = 0.92
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_tf0fj"]
+material = SubResource("StandardMaterial3D_ivwea")
+top_radius = 0.1
+bottom_radius = 0.12
+height = 1.25
+radial_segments = 7
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_avghr"]
+albedo_color = Color(0.22, 0.06, 0.03, 1)
+roughness = 0.8
+emission_enabled = true
+emission = Color(1, 0.24, 0.03, 1)
+emission_energy_multiplier = 2.6
+
+[sub_resource type="SphereMesh" id="SphereMesh_ropfg"]
+material = SubResource("StandardMaterial3D_avghr")
+radius = 0.09
+height = 0.16
+radial_segments = 6
+rings = 3
+
+[sub_resource type="Gradient" id="Gradient_ulwe2"]
+offsets = PackedFloat32Array(0, 0.22, 0.62, 1)
+colors = PackedColorArray(1, 0.62, 0.16, 0.95, 1, 0.38, 0.06, 0.9, 0.85, 0.15, 0.01, 0.55, 0.4, 0.03, 0, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_k24dy"]
+gradient = SubResource("Gradient_ulwe2")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_ojk3l"]
+emission_shape = 1
+emission_sphere_radius = 0.45
+angle_min = -6.0
+angle_max = 6.0
+direction = Vector3(0, 1, 0)
+spread = 16.0
+initial_velocity_min = 0.9
+initial_velocity_max = 1.6
+gravity = Vector3(0, 1.6, 0)
+scale_min = 0.8
+scale_max = 1.2
+color_ramp = SubResource("GradientTexture1D_k24dy")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mf8dw"]
+transparency = 1
+blend_mode = 1
+cull_mode = 2
+depth_draw_mode = 2
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(1.6, 1.35, 1.08, 1)
+albedo_texture = ExtResource("9_rjl4m")
+disable_receive_shadows = true
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="QuadMesh_1rs2q"]
+material = SubResource("StandardMaterial3D_mf8dw")
+size = Vector2(1.05, 1.9)
+
+[sub_resource type="Gradient" id="Gradient_yr6ji"]
+offsets = PackedFloat32Array(0, 0.3, 0.72, 1)
+colors = PackedColorArray(1, 0.78, 0.28, 1, 1, 0.48, 0.09, 0.95, 0.9, 0.18, 0.02, 0.6, 0.4, 0.03, 0, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_gnp47"]
+gradient = SubResource("Gradient_yr6ji")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_fwcpt"]
+emission_shape = 1
+emission_sphere_radius = 0.36
+angle_min = -10.0
+angle_max = 10.0
+direction = Vector3(0, 1, 0)
+spread = 24.0
+initial_velocity_min = 1.2
+initial_velocity_max = 1.9
+gravity = Vector3(0, 1.8, 0)
+scale_min = 0.7
+scale_max = 1.15
+color_ramp = SubResource("GradientTexture1D_gnp47")
+
+[sub_resource type="QuadMesh" id="QuadMesh_nb2e5"]
+material = SubResource("StandardMaterial3D_mf8dw")
+size = Vector2(0.55, 1.25)
+
+[sub_resource type="Gradient" id="Gradient_q26xr"]
+offsets = PackedFloat32Array(0, 0.32, 0.75, 1)
+colors = PackedColorArray(1, 1, 0.9, 1, 1, 0.9, 0.5, 1, 1, 0.55, 0.12, 0.7, 1, 0.22, 0.02, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_mvoav"]
+gradient = SubResource("Gradient_q26xr")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_ae3ot"]
+emission_shape = 1
+emission_sphere_radius = 0.24
+angle_min = -4.0
+angle_max = 4.0
+direction = Vector3(0, 1, 0)
+spread = 9.0
+initial_velocity_min = 1.0
+initial_velocity_max = 1.6
+gravity = Vector3(0, 1.5, 0)
+scale_min = 0.8
+scale_max = 1.1
+color_ramp = SubResource("GradientTexture1D_mvoav")
+
+[sub_resource type="QuadMesh" id="QuadMesh_2jnp3"]
+material = SubResource("StandardMaterial3D_mf8dw")
+size = Vector2(0.42, 0.95)
+
+[sub_resource type="Gradient" id="Gradient_iprae"]
+offsets = PackedFloat32Array(0, 0.35, 0.75, 1)
+colors = PackedColorArray(1, 0.95, 0.6, 1, 1, 0.55, 0.12, 0.9, 0.9, 0.2, 0.02, 0.55, 0.5, 0.05, 0, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_5vw4w"]
+gradient = SubResource("Gradient_iprae")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_bc7s6"]
+emission_shape = 1
+emission_sphere_radius = 0.35
+direction = Vector3(0, 1, 0)
+spread = 40.0
+initial_velocity_min = 0.9
+initial_velocity_max = 2.0
+gravity = Vector3(0, 0.4, 0)
+scale_min = 0.5
+color_ramp = SubResource("GradientTexture1D_5vw4w")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_e5bbe"]
+transparency = 1
+blend_mode = 1
+cull_mode = 2
+depth_draw_mode = 2
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(1.8, 1.4, 0.8, 1)
+albedo_texture = ExtResource("10_6fae0")
+disable_receive_shadows = true
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="QuadMesh_71f8i"]
+material = SubResource("StandardMaterial3D_e5bbe")
+size = Vector2(0.075, 0.075)
+
+[sub_resource type="Gradient" id="Gradient_0b2xn"]
+offsets = PackedFloat32Array(0, 0.2, 0.62, 1)
+colors = PackedColorArray(0.3, 0.26, 0.23, 0, 0.28, 0.24, 0.21, 0.18, 0.24, 0.21, 0.19, 0.12, 0.21, 0.19, 0.17, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_pahio"]
+gradient = SubResource("Gradient_0b2xn")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_c8fub"]
+emission_shape = 1
+emission_sphere_radius = 0.45
+angle_min = -20.0
+angle_max = 20.0
+direction = Vector3(0, 1, 0)
+spread = 18.0
+initial_velocity_min = 0.45
+initial_velocity_max = 0.85
+gravity = Vector3(0.12, 0.05, 0)
+scale_max = 1.6
+color_ramp = SubResource("GradientTexture1D_pahio")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rqs7l"]
+transparency = 1
+cull_mode = 2
+depth_draw_mode = 2
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_texture = ExtResource("13_33b85")
+disable_receive_shadows = true
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="QuadMesh_iygo7"]
+material = SubResource("StandardMaterial3D_rqs7l")
+size = Vector2(1.7, 1.7)
 
 [node name="PalisadeVillage" type="Node3D" unique_id=1915293094]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
@@ -957,3 +1261,260 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25, 0.75, -24.1)
 
 [node name="EastGateTorch" parent="." unique_id=1858402666 instance=ExtResource("7_quwca")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 33, 0.75, -24.1)
+
+[node name="WestGateFlame" type="Node3D" parent="." unique_id=1438762736 instance=ExtResource("8_quwca")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25, 2.6, -24.1)
+
+[node name="Flames" type="GPUParticles3D" parent="WestGateFlame" unique_id=1790209661]
+cast_shadow = 0
+amount = 26
+lifetime = 0.85
+preprocess = 0.85
+fixed_fps = 60
+visibility_aabb = AABB(-0.9, -0.3, -0.9, 1.8, 2.6, 1.8)
+local_coords = true
+process_material = SubResource("ParticleProcessMaterial_oltjf")
+draw_pass_1 = SubResource("QuadMesh_2lrev")
+
+[node name="Core" type="GPUParticles3D" parent="WestGateFlame" unique_id=843834073]
+cast_shadow = 0
+amount = 18
+lifetime = 0.5
+preprocess = 0.5
+fixed_fps = 60
+visibility_aabb = AABB(-0.7, -0.3, -0.7, 1.4, 2, 1.4)
+local_coords = true
+process_material = SubResource("ParticleProcessMaterial_qhfba")
+draw_pass_1 = SubResource("QuadMesh_5r41h")
+
+[node name="Embers" type="GPUParticles3D" parent="WestGateFlame" unique_id=1032397385]
+cast_shadow = 0
+amount = 14
+lifetime = 1.7
+preprocess = 1.7
+fixed_fps = 60
+visibility_aabb = AABB(-1, -0.3, -1, 2, 3.2, 2)
+local_coords = true
+process_material = SubResource("ParticleProcessMaterial_40uqj")
+draw_pass_1 = SubResource("QuadMesh_ejnm7")
+
+[node name="Light" type="OmniLight3D" parent="WestGateFlame" unique_id=1135784451]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 0)
+light_color = Color(1, 0.56, 0.22, 1)
+light_energy = 1.6
+script = ExtResource("11_cr8dy")
+base_energy = 1.6
+flicker_strength = 0.24
+flicker_speed = 7.0
+
+[node name="EastGateFlame" type="Node3D" parent="." unique_id=2129483370 instance=ExtResource("8_quwca")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 33, 2.6, -24.1)
+
+[node name="Flames" type="GPUParticles3D" parent="EastGateFlame" unique_id=1633113776]
+cast_shadow = 0
+amount = 26
+lifetime = 0.85
+preprocess = 0.85
+fixed_fps = 60
+visibility_aabb = AABB(-0.9, -0.3, -0.9, 1.8, 2.6, 1.8)
+local_coords = true
+process_material = SubResource("ParticleProcessMaterial_oltjf")
+draw_pass_1 = SubResource("QuadMesh_2lrev")
+
+[node name="Core" type="GPUParticles3D" parent="EastGateFlame" unique_id=404874557]
+cast_shadow = 0
+amount = 18
+lifetime = 0.5
+preprocess = 0.5
+fixed_fps = 60
+visibility_aabb = AABB(-0.7, -0.3, -0.7, 1.4, 2, 1.4)
+local_coords = true
+process_material = SubResource("ParticleProcessMaterial_qhfba")
+draw_pass_1 = SubResource("QuadMesh_5r41h")
+
+[node name="Embers" type="GPUParticles3D" parent="EastGateFlame" unique_id=2070370302]
+cast_shadow = 0
+amount = 14
+lifetime = 1.7
+preprocess = 1.7
+fixed_fps = 60
+visibility_aabb = AABB(-1, -0.3, -1, 2, 3.2, 2)
+local_coords = true
+process_material = SubResource("ParticleProcessMaterial_40uqj")
+draw_pass_1 = SubResource("QuadMesh_ejnm7")
+
+[node name="Light" type="OmniLight3D" parent="EastGateFlame" unique_id=237092823]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 0)
+light_color = Color(1, 0.56, 0.22, 1)
+light_energy = 1.6
+script = ExtResource("11_cr8dy")
+base_energy = 1.6
+flicker_strength = 0.24
+flicker_speed = 7.0
+
+[node name="CourtyardBonfire" type="Node3D" parent="." unique_id=764049484 instance=ExtResource("12_iwmju")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28.5, 0.75, -44)
+
+[node name="FirePit" type="Node3D" parent="CourtyardBonfire" unique_id=2097954327]
+
+[node name="Ash" type="MeshInstance3D" parent="CourtyardBonfire/FirePit" unique_id=458893896]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.018, 0)
+mesh = SubResource("CylinderMesh_gfu7w")
+
+[node name="Stones" type="Node3D" parent="CourtyardBonfire/FirePit" unique_id=1282427136]
+
+[node name="Stone00" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Stones" unique_id=76261955]
+transform = Transform3D(0.97589743, 0, 0.19204207, 0, 0.8, 0, -0.21822962, 0, 0.85878974, 0.9954154, 0.11, 0.22259422)
+mesh = SubResource("SphereMesh_0g43x")
+
+[node name="Stone01" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Stones" unique_id=1072173262]
+transform = Transform3D(-0.05225767, 0, 0.98583937, 0, 0.596808, 0, -1.1031617, 0, -0.046700016, 0.61945164, 0.11, 0.81035775)
+mesh = SubResource("SphereMesh_0g43x")
+
+[node name="Stone02" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Stones" unique_id=10103828]
+transform = Transform3D(-0.854131, 0, 0.12212874, 0, 0.44597632, 0, -0.107611544, 0, -0.96935636, -0.04636044, 0.11, 1.0189459)
+mesh = SubResource("SphereMesh_0g43x")
+
+[node name="Stone03" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Stones" unique_id=1489620364]
+transform = Transform3D(-0.31737933, 0, -0.82312095, 0, 0.68803596, 0, 1.0333401, 0, -0.25281277, -0.69047993, 0.11, 0.75075793)
+mesh = SubResource("SphereMesh_0g43x")
+
+[node name="Stone04" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Stones" unique_id=1694171356]
+transform = Transform3D(0.9190815, 0, -0.34727344, 0, 0.7764915, 0, 0.46762383, 0, 0.6825413, -1.0115162, 0.11, 0.13128197)
+mesh = SubResource("SphereMesh_0g43x")
+
+[node name="Stone05" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Stones" unique_id=1391114489]
+transform = Transform3D(0.526337, 0, 0.6363531, 0, 0.51163787, 0, -0.7020431, 0, 0.47708783, -0.8592528, 0.11, -0.54962224)
+mesh = SubResource("SphereMesh_0g43x")
+
+[node name="Stone06" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Stones" unique_id=640392120]
+transform = Transform3D(-0.7756695, 0, 0.6682256, 0, 0.4914322, 0, -0.8246372, 0, -0.62854576, -0.30493546, 0.11, -0.97335213)
+mesh = SubResource("SphereMesh_0g43x")
+
+[node name="Stone07" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Stones" unique_id=596777005]
+transform = Transform3D(-0.79060644, 0, -0.54903525, 0, 0.76149267, 0, 0.52040625, 0, -0.8340999, 0.39206457, 0.11, -0.9416397)
+mesh = SubResource("SphereMesh_0g43x")
+
+[node name="Stone08" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Stones" unique_id=134302856]
+transform = Transform3D(0.37390932, 0, -0.87163633, 0, 0.7121067, 0, 0.8615189, 0, 0.37830043, 0.90561324, 0.11, -0.46932364)
+mesh = SubResource("SphereMesh_0g43x")
+
+[node name="Logs" type="Node3D" parent="CourtyardBonfire/FirePit" unique_id=1428409076]
+
+[node name="Log00" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Logs" unique_id=375392389]
+transform = Transform3D(-4.1061284e-08, -0.9393727, 0.3428978, 1, -4.371139e-08, 0, 1.4988538e-08, 0.3428978, 0.9393727, 0.06575609, 0.15, 0.024002846)
+mesh = SubResource("CylinderMesh_tf0fj")
+
+[node name="Log01" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Logs" unique_id=2147483177]
+transform = Transform3D(-1.4609993e-08, -0.3342377, 0.9424888, 1, -4.371139e-08, 0, 4.1197495e-08, 0.9424888, 0.3342377, 0.023396641, 0.175, 0.06597421)
+mesh = SubResource("CylinderMesh_tf0fj")
+
+[node name="Log02" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Logs" unique_id=1074869272]
+transform = Transform3D(2.244373e-08, 0.5134527, 0.8581179, 1, -4.371139e-08, 0, 3.7509523e-08, 0.8581179, -0.5134527, -0.035941698, 0.2, 0.06006825)
+mesh = SubResource("CylinderMesh_tf0fj")
+
+[node name="Log03" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Logs" unique_id=388614105]
+transform = Transform3D(4.3210097e-08, 0.9885318, 0.1510127, 1, -4.371139e-08, 0, 6.600975e-09, 0.1510127, -0.9885318, -0.06919723, 0.225, 0.01057089)
+mesh = SubResource("CylinderMesh_tf0fj")
+
+[node name="Coals" type="Node3D" parent="CourtyardBonfire/FirePit" unique_id=578601636]
+
+[node name="Coal00" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Coals" unique_id=41334260]
+transform = Transform3D(1, 0, 0, 0, 0.7, 0, 0, 0, 1, 0.16, 0.09, 0)
+mesh = SubResource("SphereMesh_ropfg")
+
+[node name="Coal01" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Coals" unique_id=1408959867]
+transform = Transform3D(1, 0, 0, 0, 0.7, 0, 0, 0, 1, -0.16222662, 0.09, 0.15535653)
+mesh = SubResource("SphereMesh_ropfg")
+
+[node name="Coal02" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Coals" unique_id=1286513457]
+transform = Transform3D(1, 0, 0, 0, 0.7, 0, 0, 0, 1, 0.024499716, 0.09, -0.2590028)
+mesh = SubResource("SphereMesh_ropfg")
+
+[node name="Coal03" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Coals" unique_id=559141611]
+transform = Transform3D(1, 0, 0, 0, 0.7, 0, 0, 0, 1, 0.20683944, 0.09, 0.23016368)
+mesh = SubResource("SphereMesh_ropfg")
+
+[node name="Coal04" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Coals" unique_id=775278368]
+transform = Transform3D(1, 0, 0, 0, 0.7, 0, 0, 0, 1, -0.39387515, 0.09, -0.05578457)
+mesh = SubResource("SphereMesh_ropfg")
+
+[node name="Coal05" type="MeshInstance3D" parent="CourtyardBonfire/FirePit/Coals" unique_id=369346337]
+transform = Transform3D(1, 0, 0, 0, 0.7, 0, 0, 0, 1, 0.38817284, 0.09, -0.18780053)
+mesh = SubResource("SphereMesh_ropfg")
+
+[node name="FlameBase" type="GPUParticles3D" parent="CourtyardBonfire" unique_id=780594721]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.18, 0)
+cast_shadow = 0
+amount = 34
+lifetime = 0.95
+preprocess = 0.95
+fixed_fps = 60
+visibility_aabb = AABB(-4, -1, -4, 8, 9, 8)
+local_coords = true
+draw_order = 1
+process_material = SubResource("ParticleProcessMaterial_ojk3l")
+draw_pass_1 = SubResource("QuadMesh_1rs2q")
+
+[node name="FlameTongues" type="GPUParticles3D" parent="CourtyardBonfire" unique_id=1732668032]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
+cast_shadow = 0
+amount = 38
+lifetime = 0.8
+preprocess = 0.8
+fixed_fps = 60
+visibility_aabb = AABB(-4, -1, -4, 8, 9, 8)
+local_coords = true
+draw_order = 1
+process_material = SubResource("ParticleProcessMaterial_fwcpt")
+draw_pass_1 = SubResource("QuadMesh_nb2e5")
+
+[node name="FlameCore" type="GPUParticles3D" parent="CourtyardBonfire" unique_id=2006579849]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, 0)
+cast_shadow = 0
+amount = 24
+lifetime = 0.62
+preprocess = 0.62
+fixed_fps = 60
+visibility_aabb = AABB(-3, -1, -3, 6, 7, 6)
+local_coords = true
+draw_order = 1
+process_material = SubResource("ParticleProcessMaterial_ae3ot")
+draw_pass_1 = SubResource("QuadMesh_2jnp3")
+
+[node name="Embers" type="GPUParticles3D" parent="CourtyardBonfire" unique_id=1294266171]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.45, 0)
+cast_shadow = 0
+amount = 64
+lifetime = 3.0
+preprocess = 3.0
+fixed_fps = 60
+visibility_aabb = AABB(-5, -1, -5, 10, 12, 10)
+local_coords = true
+draw_order = 1
+process_material = SubResource("ParticleProcessMaterial_bc7s6")
+draw_pass_1 = SubResource("QuadMesh_71f8i")
+
+[node name="Smoke" type="GPUParticles3D" parent="CourtyardBonfire" unique_id=422269715]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+cast_shadow = 0
+amount = 34
+lifetime = 5.0
+preprocess = 5.0
+fixed_fps = 60
+visibility_aabb = AABB(-6, -1, -6, 12, 16, 12)
+local_coords = true
+draw_order = 1
+process_material = SubResource("ParticleProcessMaterial_c8fub")
+draw_pass_1 = SubResource("QuadMesh_iygo7")
+
+[node name="Light" type="OmniLight3D" parent="CourtyardBonfire" unique_id=566350943]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.35, 0)
+light_color = Color(1, 0.52, 0.18, 1)
+light_energy = 3.4
+omni_range = 14.0
+omni_attenuation = 1.25
+script = ExtResource("11_cr8dy")
+base_energy = 3.4
+flicker_strength = 0.2
+flicker_speed = 5.5
