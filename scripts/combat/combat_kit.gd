@@ -46,8 +46,28 @@ static func install_clips(player: AnimationPlayer, skeleton: Skeleton3D, body: N
 	return SabreAttacks.install(player, skeleton, body, idle_clip, grip)
 
 
-## Puts a sabre in the right hand of a character's skeleton.
-static func arm_with_sabre(skeleton: Skeleton3D, steel: Color = Color(0.74, 0.76, 0.78)) -> Sabre:
+## Where the grip sits inside the closed fist, in RightHand bone space
+## (centimetres; the armature is scaled 0.01). On both rigs the fingers run
+## along +Y, the thumb sticks out on +Z and the palm faces -X; these points
+## sit just inside the palm at the finger roots, measured from the hand mesh.
+const HERTS_GRIP_CENTER := Vector3(-1.5, 12.0, 0.0)
+const WARRIOR_GRIP_CENTER := Vector3(-3.5, 11.0, 0.5)
+## How far the grip leans from straight across the palm toward the fingers.
+## The grip lies diagonally across the palm.
+const GRIP_FINGER_TILT := 0.35
+## Outward cant toward the back of the hand, so a sabre carried in a hanging
+## hand clears the thigh instead of passing through it.
+const GRIP_OUTWARD_CANT := 0.6
+
+
+## Puts a sabre in the right hand of a character's skeleton, held in a fist:
+## the grip crosses the palm, the blade leaves on the -Z side of the hand (on
+## these rigs that is the side facing forward when the arm hangs) and the edge
+## faces the knuckles. The rigs have no finger bones, so this seat is what
+## sells the hold.
+static func arm_with_sabre(
+	skeleton: Skeleton3D, steel: Color = Color(0.74, 0.76, 0.78), grip_center: Vector3 = HERTS_GRIP_CENTER
+) -> Sabre:
 	var attachment := BoneAttachment3D.new()
 	attachment.name = "RightHandSabre"
 	attachment.bone_name = "RightHand"
@@ -55,11 +75,20 @@ static func arm_with_sabre(skeleton: Skeleton3D, steel: Color = Color(0.74, 0.76
 	var sabre := Sabre.new()
 	sabre.name = "Sabre"
 	sabre.steel_color = steel
-	# Bone space is in centimetres (the armature is scaled 0.01). The blade
-	# leaves the fist along the finger axis (+Y), edge forward.
-	sabre.transform = Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 100.0), Vector3(0.0, 8.0, 0.0))
+	sabre.transform = grip_transform(grip_center)
 	attachment.add_child(sabre)
 	return sabre
+
+
+## The sabre's transform in hand-bone space. Sabre space: blade along +Y,
+## back of the blade +Z, grip centre at y = -0.03 m.
+static func grip_transform(grip_center: Vector3) -> Transform3D:
+	var blade := Vector3(GRIP_OUTWARD_CANT, GRIP_FINGER_TILT, -1.0).normalized()
+	# The edge faces the knuckles (+Y), so the back faces the wrist (-Y).
+	var back := (Vector3.DOWN - blade * Vector3.DOWN.dot(blade)).normalized()
+	var side := blade.cross(back)
+	var basis := Basis(side, blade, back) * Basis.from_scale(Vector3.ONE * 100.0)
+	return Transform3D(basis, grip_center + blade * 3.0)
 
 
 ## One-shot burst of small particles: blood on flesh, sparks on steel.

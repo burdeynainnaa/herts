@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://dhttix0ooshei"
 path.s3tc="res://.godot/imported/cavalry_standard.png-d20ef21d8cf4512dcb3b5e72ec455128.s3tc.ctex"
+path.etc2="res://.godot/imported/cavalry_standard.png-d20ef21d8cf4512dcb3b5e72ec455128.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/textures/cavalry_standard.png"
-dest_files=["res://.godot/imported/cavalry_standard.png-d20ef21d8cf4512dcb3b5e72ec455128.s3tc.ctex"]
+dest_files=["res://.godot/imported/cavalry_standard.png-d20ef21d8cf4512dcb3b5e72ec455128.s3tc.ctex", "res://.godot/imported/cavalry_standard.png-d20ef21d8cf4512dcb3b5e72ec455128.etc2.ctex"]
 
 [params]
 

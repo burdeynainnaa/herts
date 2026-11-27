@@ -236,7 +236,10 @@ func _process(delta: float) -> void:
 	_camera_yaw.global_position = _camera_yaw.global_position.lerp(target, 1.0 - exp(-camera_follow_speed * delta))
 	_update_procedural_layers(delta)
 	if _idle_arm_modifier != null:
-		var target_influence := 1.0 if _active_role == &"idle" and not _mounted else 0.0
+		var fighting: bool = _combat != null and _combat.owns_animation()
+		# Combat keys every arm itself; a relaxed hang on top would drag the
+		# sabre arm down through the blows.
+		var target_influence := 1.0 if _active_role == &"idle" and not _mounted and not fighting else 0.0
 		if _locomotion != null:
 			# The stand built from the walk already hangs the arms; this fix
 			# was for the shipped idle's raised arms.
