@@ -1,0 +1,26 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/enemy_sabre_fighter.gd" id="1_enemy"]
+[ext_resource type="PackedScene" path="res://assets/models/cossack_warrior/character.tscn" id="2_body"]
+[ext_resource type="Script" path="res://scripts/combat/health.gd" id="3_health"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.4
+height = 1.8
+
+[node name="EnemySabreFighter" type="CharacterBody3D"]
+collision_layer = 8
+collision_mask = 15
+script = ExtResource("1_enemy")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="CharacterRotationRoot" type="Node3D" parent="."]
+
+[node name="Character" parent="CharacterRotationRoot" instance=ExtResource("2_body")]
+
+[node name="Health" type="Node" parent="."]
+script = ExtResource("3_health")
+max_health = 60.0

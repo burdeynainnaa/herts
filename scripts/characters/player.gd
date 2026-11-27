@@ -71,6 +71,7 @@ var _horse: CharacterBody3D
 var _mounted: bool = false
 var _normal_collision_layer: int
 var _normal_collision_mask: int
+var _combat: Node
 
 
 func _ready() -> void:
@@ -89,6 +90,7 @@ func _ready() -> void:
 	_normal_collision_layer = collision_layer
 	_normal_collision_mask = collision_mask
 	_horse = get_node_or_null("../Horse") as CharacterBody3D
+	_combat = get_node_or_null("Combat")
 	floor_snap_length = floor_snap_distance
 	_camera_yaw.top_level = true
 	_camera_yaw.global_position = _camera_target_position()
@@ -152,7 +154,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if Input.is_action_just_pressed(&"mount_horse"):
+	var fighting: bool = _combat != null and _combat.owns_animation()
+	if Input.is_action_just_pressed(&"mount_horse") and not fighting:
 		_toggle_mount()
 	if _mounted:
 		_ride_horse(delta)
@@ -162,7 +165,7 @@ func _physics_process(delta: float) -> void:
 		velocity.y = -floor_stick_velocity
 	else:
 		velocity.y -= _gravity * delta
-	if Input.is_action_just_pressed(&"jump") and was_on_floor:
+	if Input.is_action_just_pressed(&"jump") and was_on_floor and not fighting:
 		velocity.y = jump_velocity
 
 	var input_vector: Vector2 = Input.get_vector(&"move_left", &"move_right", &"move_forward", &"move_back")
@@ -179,17 +182,67 @@ func _physics_process(delta: float) -> void:
 	var is_sprinting: bool = Input.is_action_pressed(&"sprint")
 	var target_speed: float = run_speed if is_sprinting else walk_speed
 	var target_velocity: Vector3 = movement_direction * target_speed
+	if _combat != null:
+		target_velocity = _combat.filter_velocity(target_velocity)
 	velocity.x = move_toward(velocity.x, target_velocity.x, acceleration * delta)
 	velocity.z = move_toward(velocity.z, target_velocity.z, acceleration * delta)
 
 	move_and_slide()
-	_turn_visual_toward(movement_direction, delta)
-	_update_animation_state()
+	if not fighting:
+		_turn_visual_toward(movement_direction, delta)
+		_update_animation_state()
 	if global_position.y < respawn_below_y:
-		global_position = _spawn_position
-		velocity = Vector3.ZERO
-		_camera_yaw.global_position = _camera_target_position()
-		_play_role(&"idle")
+		respawn()
+
+
+## Puts the Cossack back at the spawn point on foot.
+func respawn() -> void:
+	if _mounted:
+		_mounted = false
+		_horse.mounted = false
+		collision_layer = _normal_collision_layer
+		collision_mask = _normal_collision_mask
+		_visual_root.position = Vector3.ZERO
+		_spring_arm.spring_length = camera_distance
+	global_position = _spawn_position
+	velocity = Vector3.ZERO
+	_visual_root.rotation = Vector3.ZERO
+	_camera_yaw.global_position = _camera_target_position()
+	release_animation()
+	_play_role(&"idle")
+
+
+## Hands the animation back to locomotion after combat played its own clips.
+func release_animation() -> void:
+	_active_role = &""
+
+
+func is_mounted() -> bool:
+	return _mounted
+
+
+func idle_clip() -> StringName:
+	return _clips_by_role.get(&"idle", &"")
+
+
+func get_animation_player() -> AnimationPlayer:
+	return _animation_player
+
+
+func get_visual_root() -> Node3D:
+	return _visual_root
+
+
+func get_camera_yaw() -> Node3D:
+	return _camera_yaw
+
+
+func get_camera() -> Camera3D:
+	return _spring_arm.get_node_or_null("Camera3D") as Camera3D if _spring_arm != null else null
+
+
+func get_skeleton() -> Skeleton3D:
+	return get_node_or_null(skeleton_path) as Skeleton3D
 
 
 func _toggle_mount() -> void:
