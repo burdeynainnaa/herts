@@ -11,7 +11,8 @@ game UI. The Summer board contains the current design and visual references.
 The main scene has an animated Cossack and a third-person movement controller.
 The first area starts on a rocky ridge above a poppy field, a winding river and
 a palisaded timber village at sunset, with a crimson cavalry standard flying at
-the outpost gate. Combat and UI come later. The original
+the outpost gate. A first sabre-combat prototype puts two Tatar sabre fighters
+on the slope below the spawn. The original
 Summer starter scene remains at `main.tscn` as a reference.
 
 ## Open and run
@@ -21,7 +22,10 @@ The configured entry point is `scenes/main.tscn`. Use WASD to walk, hold Shift
 to run, Space to jump, and the mouse to look around. Press F near the horse to
 mount or dismount; use WASD to ride and hold Shift to gallop. Escape releases the mouse;
 click the game to capture it again. Press M to open or close the world map; Escape
-also closes the map. The project uses the Forward+ renderer and
+also closes the map. Left mouse swings the sabre (press again during the
+follow-through for a combo of up to three blows); hold right mouse to guard.
+Guarding just before a blow lands parries it and staggers the attacker, and a
+staggered, wounded enemy is executed by the next blow, which refills stamina. The project uses the Forward+ renderer and
 Jolt 3D physics.
 
 ## Project layout
@@ -63,6 +67,25 @@ have one editor at a time.
 monolithic scene. Its rebuild entry points reject the assembled instanced region
 to avoid replacing the split scenes. Use a separate scratch scene for legacy
 generation; adapting it to build individual regions is future work.
+
+## Combat prototype
+
+- `scenes/characters/player.tscn` has a `Combat` node (`scripts/combat/player_combat.gd`)
+  with its `Health`. The controller asks it whether it owns the animation and how fast
+  the body may move; all tuning is exported on that node.
+- `scenes/characters/enemy_sabre_fighter.tscn` is the basic enemy
+  (`scripts/combat/enemy_sabre_fighter.gd`): approach, circle in front of the camera,
+  telegraphed chop with a blade glint, random guard, stagger on parry. One fighter
+  attacks at a time.
+- `scenes/combat/training_encounter.tscn` places the fighters; `main.tscn` instances
+  it together with `scenes/ui/combat_hud.tscn` (Ukrainian HUD).
+- `scripts/combat/combat_kit.gd` holds the shared pieces. The Herts Cossack rig only
+  ships locomotion, so the chop and guard clips are borrowed at runtime from
+  `assets/models/cossack_warrior/rig.glb`, which has the same skeleton. The sabre is
+  built in code (`scripts/combat/sabre.gd`) and attached to the right hand.
+- Hits are resolved by reach and arc, not physics hitboxes; limb damage from the
+  design board will need per-bone hurtboxes later. The enemy model is a re-tinted
+  Cossack warrior placeholder until a Tatar character exists.
 
 ## The walk clip
 
