@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://b18isjxmg3hx7"]
+
+[ext_resource type="PackedScene" uid="uid://3mkv8q66a1vx" path="res://assets/models/crimean_tatar/rig.glb" id="1_rig"]
+
+[node name="Character" type="Node3D" unique_id=1928592786]
+
+[node name="Visual" parent="." unique_id=1914646981 instance=ExtResource("1_rig")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
