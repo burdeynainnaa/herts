@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://xg50n1okhdig"]
+
+[ext_resource type="PackedScene" path="res://scenes/characters/enemy_sabre_fighter.tscn" id="1_fighter"]
+
+[node name="TrainingEncounter" type="Node3D" unique_id=2061183882]
+
+[node name="SabreFighterA" parent="." unique_id=766175508 instance=ExtResource("1_fighter")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -2, 7.35, 3)
+
+[node name="SabreFighterB" parent="." unique_id=1954272087 instance=ExtResource("1_fighter")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 3, 6.75, 0.5)

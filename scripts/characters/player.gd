@@ -11,10 +11,62 @@ const REQUIRED_ACTIONS: Array[StringName] = [
 @export_category("Movement")
 @export var walk_speed: float = 1.45
 @export var run_speed: float = 6.0
-@export var acceleration: float = 14.0
 @export var jump_velocity: float = 3.8
-@export var turn_speed: float = 12.0
 @export var floor_snap_distance: float = 0.3
+
+## Weighted locomotion: the body only moves the way it faces, the heading turns
+## at a limited rate that narrows with speed, and speed builds and bleeds off
+## over time, so a running Cossack carries momentum, arcs through turns and has
+## to plant and pivot to reverse.
+@export_category("Momentum")
+@export var walk_acceleration: float = 4.2
+@export var run_acceleration: float = 5.2
+@export var stop_deceleration: float = 9.0
+@export var slowdown_deceleration: float = 5.6
+## Braking used when the input points well behind a running body.
+@export var pivot_deceleration: float = 14.0
+## Heading turn rate in degrees per second while standing and at full run.
+@export var turn_rate_standing: float = 260.0
+@export var turn_rate_running: float = 150.0
+## How fast the turn itself builds up and brakes, degrees per second squared,
+## standing and at full run. Lower values make turns rounder and heavier.
+@export var turn_acceleration_standing: float = 1100.0
+@export var turn_acceleration_running: float = 520.0
+## Input this far behind the heading (degrees) while above walk speed plants the feet.
+@export var pivot_angle: float = 115.0
+@export var air_control: float = 0.12
+@export_range(0.0, 1.0) var uphill_penalty: float = 0.9
+@export_range(0.0, 1.0) var downhill_bonus: float = 0.25
+
+@export_category("Landing")
+@export var soft_landing_speed: float = 4.0
+@export var hard_landing_speed: float = 7.0
+@export var hard_landing_recovery: float = 0.5
+
+@export_category("Body Lean")
+@export var max_turn_lean_degrees: float = 7.0
+@export var turn_lean_gain: float = 0.008
+## Torso (spine) lean against changes in speed and into slopes.
+@export var max_torso_lean_degrees: float = 9.0
+@export var torso_accel_gain: float = 0.02
+@export var torso_slope_gain: float = 0.35
+## Lean springs: stiffness and damping ratio (below 1 overshoots and settles).
+@export var lean_stiffness: float = 70.0
+@export_range(0.05, 2.0) var lean_damping_ratio: float = 0.5
+
+@export_category("Procedural Body")
+@export var procedural_body: bool = true
+## The camera direction the head follows, up to this angle from the body;
+## BodyLayer splits it into head turn first, then a little torso turn.
+@export var head_look_max_yaw_degrees: float = 105.0
+## Small idle fidgets while standing still: adjusting the hat, shifting from
+## foot to foot, glancing about. Seconds between them, min and max.
+@export var idle_fidgets: bool = true
+@export var fidget_interval: Vector2 = Vector2(4.0, 9.0)
+## Landing compression: metres of pelvis dip per m/s of fall speed.
+@export var landing_dip_per_speed: float = 0.25
+@export var exertion_gain_per_second: float = 0.08
+@export var exertion_recovery_per_second: float = 0.04
 @export var floor_stick_velocity: float = 0.5
 @export var animation_blend_time: float = 0.25
 @export var relax_idle_right_arm: bool = false
@@ -71,6 +123,44 @@ var _horse: CharacterBody3D
 var _mounted: bool = false
 var _normal_collision_layer: int
 var _normal_collision_mask: int
+var _combat: Node
+var _ground_speed: float = 0.0
+var _yaw_rate: float = 0.0
+var _pivoting: bool = false
+var _landing_recovery: float = 0.0
+var _peak_fall_speed: float = 0.0
+var _lean_roll: float = 0.0
+var _lean_roll_velocity: float = 0.0
+var _torso_lean: float = 0.0
+var _torso_lean_velocity: float = 0.0
+var _slope_grade: float = 0.0
+var _move_speed: float = 0.0
+var _dip: float = 0.0
+var _dip_velocity: float = 0.0
+var _fidget: StringName = &""
+var _fidget_time: float = 0.0
+var _fidget_length: float = 1.0
+var _fidget_timer: float = 5.0
+var _fidget_side: float = 1.0
+var _last_fidget: StringName = &""
+## Per fidget channel: (value, velocity) of its spring.
+var _fidget_state: Dictionary = {}
+## Spring (natural frequency rad/s, damping ratio) for each fidget channel.
+## Every channel gets a soft start and a soft stop; the heavier the moving
+## part, the lower the frequency. Ratios below 1 let light parts overshoot a
+## touch, the hand at the hat is critically damped so it never pushes through.
+const FIDGET_SPRINGS := {
+	&"hat": Vector2(5.5, 1.0),
+	&"tug": Vector2(16.0, 0.55),
+	&"dip": Vector2(6.0, 0.9),
+	&"shift": Vector2(4.0, 0.8),
+	&"lift_left": Vector2(10.0, 0.7),
+	&"lift_right": Vector2(10.0, 0.7),
+	&"glance": Vector2(7.0, 0.8),
+}
+var _locomotion: LocomotionBlend
+var _body_layer: BodyLayer
+var _ground_ik: GroundIK
 
 
 func _ready() -> void:
@@ -89,6 +179,7 @@ func _ready() -> void:
 	_normal_collision_layer = collision_layer
 	_normal_collision_mask = collision_mask
 	_horse = get_node_or_null("../Horse") as CharacterBody3D
+	_combat = get_node_or_null("Combat")
 	floor_snap_length = floor_snap_distance
 	_camera_yaw.top_level = true
 	_camera_yaw.global_position = _camera_target_position()
@@ -96,6 +187,17 @@ func _ready() -> void:
 	_spring_arm.spring_length = camera_distance
 	_spring_arm.collision_mask = camera_collision_mask
 	_spring_arm.add_excluded_object(get_rid())
+	var procedural_skeleton := get_node_or_null(skeleton_path) as Skeleton3D
+	if procedural_body and procedural_skeleton != null:
+		_locomotion = LocomotionBlend.new()
+		_locomotion.name = "LocomotionBlend"
+		_locomotion.influence = 0.0
+		procedural_skeleton.add_child(_locomotion)
+		_locomotion.setup(
+			_animation_player.get_animation(_clips_by_role[&"idle"]),
+			_animation_player.get_animation(_clips_by_role[&"walk"]),
+			_animation_player.get_animation(_clips_by_role[&"run"])
+		)
 	if relax_idle_right_arm:
 		var skeleton := get_node_or_null(skeleton_path) as Skeleton3D
 		if skeleton == null:
@@ -104,6 +206,15 @@ func _ready() -> void:
 		_idle_arm_modifier = preload("res://scripts/characters/relaxed_idle_arm.gd").new()
 		_idle_arm_modifier.influence = 0.0
 		skeleton.add_child(_idle_arm_modifier)
+	if procedural_body and procedural_skeleton != null:
+		_body_layer = BodyLayer.new()
+		_body_layer.name = "BodyLayer"
+		procedural_skeleton.add_child(_body_layer)
+		_ground_ik = GroundIK.new()
+		_ground_ik.name = "GroundIK"
+		_ground_ik.body = self
+		_ground_ik.influence = 0.0
+		procedural_skeleton.add_child(_ground_ik)
 	var riding_skeleton := get_node_or_null(skeleton_path) as Skeleton3D
 	if riding_skeleton != null:
 		_riding_modifier = preload("res://scripts/characters/riding_pose.gd").new()
@@ -123,11 +234,157 @@ func _process(delta: float) -> void:
 		return
 	var target := _camera_target_position()
 	_camera_yaw.global_position = _camera_yaw.global_position.lerp(target, 1.0 - exp(-camera_follow_speed * delta))
+	_update_procedural_layers(delta)
 	if _idle_arm_modifier != null:
 		var target_influence := 1.0 if _active_role == &"idle" and not _mounted else 0.0
+		if _locomotion != null:
+			# The stand built from the walk already hangs the arms; this fix
+			# was for the shipped idle's raised arms.
+			target_influence *= 1.0 - _locomotion.influence
 		_idle_arm_modifier.influence = move_toward(
 			_idle_arm_modifier.influence, target_influence, delta / maxf(animation_blend_time, 0.001)
 		)
+
+
+## Idle fidgets. A calm stand picks one every few seconds and plays it as a
+## 0..1 envelope: the hand rises to the hat, the weight rocks from foot to
+## foot, or the head glances to one side. Anything that is not a calm stand
+## (walking, combat, mounting) lets the current one fade out at once.
+func _update_fidgets(delta: float, fighting: bool) -> void:
+	var calm: bool = idle_fidgets and _ground_ik.stand_weight > 0.95 and not fighting and not _mounted
+	# The hat needs the head roughly facing the hand: looking away ends it.
+	var looking_away := absf(_body_layer.look_yaw_target) > deg_to_rad(30.0)
+	if _fidget == &"":
+		if calm:
+			_fidget_timer -= delta
+			if _fidget_timer <= 0.0:
+				_start_fidget(looking_away)
+		_apply_fidget(0.0, delta)
+		return
+	var interrupted := not calm or (_fidget == &"hat" and looking_away)
+	_fidget_time += delta * (3.0 if interrupted else 1.0)
+	var u := _fidget_time / maxf(_fidget_length, 0.01)
+	if u >= 1.0 or (interrupted and u >= 0.3):
+		_fidget = &""
+		_fidget_timer = randf_range(fidget_interval.x, fidget_interval.y)
+		_apply_fidget(0.0, delta)
+		return
+	_apply_fidget(u, delta)
+
+
+func _start_fidget(looking_away: bool) -> void:
+	var choices: Array[StringName] = [&"hat", &"shift", &"glance"]
+	choices.erase(_last_fidget)
+	if looking_away:
+		choices.erase(&"hat")
+	_fidget = choices[randi() % choices.size()]
+	_last_fidget = _fidget
+	_fidget_time = 0.0
+	_fidget_side = 1.0 if randf() < 0.5 else -1.0
+	match _fidget:
+		&"hat":
+			_fidget_length = 2.6
+		&"shift":
+			_fidget_length = 3.0
+		&"glance":
+			_fidget_length = 2.2
+
+
+func _apply_fidget(u: float, delta: float) -> void:
+	# A plain ramp up, hold and ramp down: the springs below give it its
+	# soft start and soft stop.
+	var envelope := clampf(u / 0.18, 0.0, 1.0) * clampf((1.0 - u) / 0.22, 0.0, 1.0)
+	if u <= 0.0:
+		envelope = 0.0
+	var hat := 0.0
+	var tug := 0.0
+	var dip := 0.0
+	var shift := 0.0
+	var lift_left := 0.0
+	var lift_right := 0.0
+	var glance := 0.0
+	match _fidget:
+		&"hat":
+			hat = envelope
+			tug = sin(u * TAU * 2.5) * envelope * smoothstep(0.3, 0.45, u)
+			dip = deg_to_rad(5.0) * envelope
+		&"shift":
+			# Rock to one side, back through the middle and onto the other
+			# foot; the foot that is freed lifts and sets down.
+			shift = sin(u * TAU) * _fidget_side
+			var raised := clampf((absf(shift) - 0.5) * 2.0, 0.0, 1.0)
+			# +shift means weight on the left, which frees the right foot.
+			if shift > 0.0:
+				lift_right = raised
+			else:
+				lift_left = raised
+		&"glance":
+			glance = deg_to_rad(42.0) * _fidget_side * envelope
+	_body_layer.hat_reach = _fidget_spring(&"hat", hat, delta)
+	_body_layer.hat_tug = _fidget_spring(&"tug", tug, delta)
+	_body_layer.head_dip = _fidget_spring(&"dip", dip, delta)
+	_body_layer.glance_yaw = _fidget_spring(&"glance", glance, delta)
+	_ground_ik.fidget_shift = _fidget_spring(&"shift", shift, delta)
+	_ground_ik.fidget_lift = PackedFloat32Array([
+		maxf(_fidget_spring(&"lift_left", lift_left, delta), 0.0),
+		maxf(_fidget_spring(&"lift_right", lift_right, delta), 0.0),
+	])
+
+
+func _fidget_spring(channel: StringName, target: float, delta: float) -> float:
+	var spec: Vector2 = FIDGET_SPRINGS[channel]
+	var state: Vector2 = _fidget_state.get(channel, Vector2.ZERO)
+	var accel := (target - state.x) * spec.x * spec.x - 2.0 * spec.y * spec.x * state.y
+	state.y += accel * delta
+	state.x += state.y * delta
+	_fidget_state[channel] = state
+	return state.x
+
+
+## Feeds the skeleton modifiers: which layers are on, how fast the stride
+## clock runs, where the head looks, how the torso leans and breathes.
+func _update_procedural_layers(delta: float) -> void:
+	if _locomotion == null:
+		return
+	var fighting: bool = _combat != null and _combat.owns_animation()
+	var grounded := is_on_floor() and not _mounted
+	var fade := delta / 0.15
+	_locomotion.influence = move_toward(_locomotion.influence, 1.0 if grounded and not fighting else 0.0, fade)
+	_locomotion.active = _locomotion.influence > 0.001
+	var stick := Input.get_vector(&"move_left", &"move_right", &"move_forward", &"move_back")
+	_locomotion.advance(delta, _move_speed, _yaw_rate, stick.length() < 0.05)
+	_ground_ik.influence = move_toward(_ground_ik.influence, 1.0 if grounded else 0.0, fade)
+	_ground_ik.active = _ground_ik.influence > 0.001
+
+	# Landing compression: the pelvis dips and springs back, feet stay planted.
+	var dip_omega := 12.0
+	_dip_velocity += (-_dip * dip_omega * dip_omega - 2.0 * 0.55 * dip_omega * _dip_velocity) * delta
+	_dip = clampf(_dip + _dip_velocity * delta, -0.3, 0.05)
+	_ground_ik.pelvis_extra = _dip
+	_ground_ik.stand_weight = (1.0 - _locomotion.move_weight) * _locomotion.influence
+	_body_layer.carry_weight = _ground_ik.stand_weight
+	_update_fidgets(delta, fighting)
+	_ground_ik.stance = PackedFloat32Array([_locomotion.stance_weight(0), _locomotion.stance_weight(1)])
+
+	_body_layer.active = not _mounted
+	var exertion_rate := exertion_gain_per_second if _move_speed > walk_speed * 2.0 else -exertion_recovery_per_second
+	_body_layer.exertion = clampf(_body_layer.exertion + exertion_rate * delta, 0.0, 1.0)
+	_body_layer.torso_lean = _torso_lean
+
+	# The head and upper spine follow the camera, within a human neck's reach;
+	# when the camera swings behind, he looks ahead again.
+	var look_yaw := 0.0
+	var look_pitch := 0.0
+	if not fighting and not _mounted:
+		var view := _visual_root.global_basis.inverse() * -_camera_pitch.global_basis.z
+		var yaw := atan2(-view.x, -view.z)
+		if absf(yaw) < deg_to_rad(115.0):
+			var reach := deg_to_rad(head_look_max_yaw_degrees)
+			look_yaw = clampf(yaw, -reach, reach)
+			var pitch := asin(clampf(view.normalized().y, -1.0, 1.0)) - deg_to_rad(camera_pitch_degrees)
+			look_pitch = clampf(pitch * 0.7, deg_to_rad(-30.0), deg_to_rad(25.0))
+	_body_layer.look_yaw_target = look_yaw
+	_body_layer.look_pitch_target = look_pitch
 
 
 func _camera_target_position() -> Vector3:
@@ -152,7 +409,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if Input.is_action_just_pressed(&"mount_horse"):
+	var fighting: bool = _combat != null and _combat.owns_animation()
+	if Input.is_action_just_pressed(&"mount_horse") and not fighting:
 		_toggle_mount()
 	if _mounted:
 		_ride_horse(delta)
@@ -162,8 +420,10 @@ func _physics_process(delta: float) -> void:
 		velocity.y = -floor_stick_velocity
 	else:
 		velocity.y -= _gravity * delta
-	if Input.is_action_just_pressed(&"jump") and was_on_floor:
+		_peak_fall_speed = maxf(_peak_fall_speed, -velocity.y)
+	if Input.is_action_just_pressed(&"jump") and was_on_floor and not fighting and _landing_recovery <= 0.0:
 		velocity.y = jump_velocity
+	_landing_recovery = maxf(_landing_recovery - delta, 0.0)
 
 	var input_vector: Vector2 = Input.get_vector(&"move_left", &"move_right", &"move_forward", &"move_back")
 	var camera_forward: Vector3 = -_camera_yaw.global_transform.basis.z
@@ -176,20 +436,229 @@ func _physics_process(delta: float) -> void:
 	if movement_direction.length_squared() > 1.0:
 		movement_direction = movement_direction.normalized()
 
-	var is_sprinting: bool = Input.is_action_pressed(&"sprint")
-	var target_speed: float = run_speed if is_sprinting else walk_speed
-	var target_velocity: Vector3 = movement_direction * target_speed
-	velocity.x = move_toward(velocity.x, target_velocity.x, acceleration * delta)
-	velocity.z = move_toward(velocity.z, target_velocity.z, acceleration * delta)
+	var previous_speed := _ground_speed
+	if fighting:
+		_move_for_combat(movement_direction, delta)
+	else:
+		_move_with_momentum(movement_direction, was_on_floor, delta)
 
 	move_and_slide()
-	_turn_visual_toward(movement_direction, delta)
-	_update_animation_state()
+	_after_move(was_on_floor)
+	_update_body_lean(fighting, previous_speed, delta)
+	if not fighting:
+		_update_animation_state()
 	if global_position.y < respawn_below_y:
-		global_position = _spawn_position
-		velocity = Vector3.ZERO
-		_camera_yaw.global_position = _camera_target_position()
-		_play_role(&"idle")
+		respawn()
+
+
+## Heading-driven locomotion. The input only chooses where the body wants to
+## face and how fast it wants to go; the body turns toward it at a limited rate
+## and always travels along its own heading.
+func _move_with_momentum(direction: Vector3, on_floor: bool, delta: float) -> void:
+	var input_strength := clampf(direction.length(), 0.0, 1.0)
+	var heading := _visual_root.rotation.y
+	var control := 1.0 if on_floor else air_control
+	var is_running := Input.is_action_pressed(&"sprint")
+	var gait_speed := run_speed if is_running else walk_speed
+	var target_speed := gait_speed * input_strength
+	var turn_gap := 0.0
+
+	if input_strength > 0.05:
+		var local_direction: Vector3 = global_basis.inverse() * direction
+		var desired_heading := atan2(-local_direction.x, -local_direction.z)
+		turn_gap = angle_difference(heading, desired_heading)
+		# Planting the feet: a body moving faster than a walk cannot swing
+		# straight round, so it brakes hard first and turns once it is slow.
+		_pivoting = on_floor and absf(turn_gap) > deg_to_rad(pivot_angle) and _ground_speed > walk_speed * 1.1
+		if not _pivoting:
+			# Wide turns still cost speed, more the harder the turn.
+			target_speed *= lerpf(1.0, 0.55, clampf(absf(turn_gap) / PI, 0.0, 1.0))
+		else:
+			target_speed = 0.0
+		var speed_ratio := clampf(_ground_speed / maxf(run_speed, 0.001), 0.0, 1.0)
+		var max_turn := deg_to_rad(lerpf(turn_rate_standing, turn_rate_running, speed_ratio)) * control
+		if _pivoting:
+			max_turn *= 0.35
+		var turn_accel := deg_to_rad(lerpf(turn_acceleration_standing, turn_acceleration_running, speed_ratio)) * control
+		# The fastest rate from which the turn can still brake to a stop
+		# exactly on the target heading, so it eases out instead of snapping.
+		var arrive_rate := sqrt(2.0 * turn_accel * absf(turn_gap))
+		var desired_rate := signf(turn_gap) * minf(max_turn, arrive_rate)
+		_steer_heading(desired_rate, turn_accel, delta)
+	else:
+		_pivoting = false
+		# No input: the turn already under way coasts to a stop.
+		_steer_heading(0.0, deg_to_rad(turn_acceleration_standing) * control, delta)
+
+	if on_floor:
+		target_speed *= _slope_factor()
+	if _landing_recovery > 0.0:
+		target_speed *= 0.35
+
+	var rate: float
+	if not on_floor:
+		rate = run_acceleration * air_control
+	elif _pivoting:
+		rate = pivot_deceleration
+	elif target_speed > _ground_speed:
+		rate = run_acceleration if is_running else walk_acceleration
+	elif input_strength <= 0.05:
+		rate = stop_deceleration
+	else:
+		rate = slowdown_deceleration
+	_ground_speed = move_toward(_ground_speed, target_speed, rate * delta)
+
+	var forward := global_basis * Vector3(-sin(_visual_root.rotation.y), 0.0, -cos(_visual_root.rotation.y))
+	if on_floor:
+		velocity.x = forward.x * _ground_speed
+		velocity.z = forward.z * _ground_speed
+	else:
+		# In the air the body keeps the momentum it left the ground with.
+		var air_target := forward * _ground_speed
+		velocity.x = move_toward(velocity.x, air_target.x, run_acceleration * air_control * delta)
+		velocity.z = move_toward(velocity.z, air_target.z, run_acceleration * air_control * delta)
+
+
+## Turns the heading with angular momentum: the yaw rate builds up and
+## bleeds off at a limited acceleration instead of jumping.
+func _steer_heading(desired_rate: float, turn_accel: float, delta: float) -> void:
+	_yaw_rate = move_toward(_yaw_rate, desired_rate, turn_accel * delta)
+	if absf(_yaw_rate) < 0.0001:
+		_yaw_rate = 0.0
+		return
+	_visual_root.rotation.y = wrapf(_visual_root.rotation.y + _yaw_rate * delta, -PI, PI)
+
+
+## Combat owns facing and decides how far the body may move.
+func _move_for_combat(direction: Vector3, delta: float) -> void:
+	_pivoting = false
+	_yaw_rate = 0.0
+	var target_velocity: Vector3 = _combat.filter_velocity(direction * walk_speed)
+	velocity.x = move_toward(velocity.x, target_velocity.x, pivot_deceleration * delta)
+	velocity.z = move_toward(velocity.z, target_velocity.z, pivot_deceleration * delta)
+	_ground_speed = Vector2(velocity.x, velocity.z).length()
+
+
+## Uphill costs speed, downhill gives a little. Measured along the heading.
+func _slope_factor() -> float:
+	var normal := get_floor_normal()
+	var forward := global_basis * Vector3(-sin(_visual_root.rotation.y), 0.0, -cos(_visual_root.rotation.y))
+	var grade := -forward.dot(normal)
+	_slope_grade = grade
+	if grade > 0.0:
+		return clampf(1.0 - uphill_penalty * grade, 0.45, 1.0)
+	return 1.0 + downhill_bonus * minf(-grade, 0.5)
+
+
+func _after_move(was_on_floor: bool) -> void:
+	# Running into a wall or a rock takes the momentum away instead of
+	# leaving the legs pumping in place.
+	var real := get_real_velocity()
+	var real_speed := Vector2(real.x, real.z).length()
+	_move_speed = real_speed
+	if is_on_floor() and is_on_wall() and real_speed < _ground_speed:
+		_ground_speed = real_speed
+	if is_on_floor() and not was_on_floor:
+		_dip_velocity -= _peak_fall_speed * landing_dip_per_speed
+		if _peak_fall_speed >= hard_landing_speed:
+			_ground_speed *= 0.25
+			_landing_recovery = hard_landing_recovery
+		elif _peak_fall_speed >= soft_landing_speed:
+			_ground_speed *= 0.7
+			_landing_recovery = 0.12
+		_peak_fall_speed = 0.0
+
+
+## Leans the whole body into turns and against changes in speed, so momentum
+## reads on the silhouette.
+func _update_body_lean(fighting: bool, previous_speed: float, delta: float) -> void:
+	var target_roll := 0.0
+	var target_torso := 0.0
+	if not fighting and is_on_floor():
+		var max_roll := deg_to_rad(max_turn_lean_degrees)
+		target_roll = clampf(_yaw_rate * _ground_speed * turn_lean_gain, -max_roll, max_roll)
+		var acceleration := (_ground_speed - previous_speed) / maxf(delta, 0.0001)
+		var max_torso := deg_to_rad(max_torso_lean_degrees)
+		target_torso = clampf(acceleration * torso_accel_gain + _slope_grade * torso_slope_gain, -max_torso, max_torso)
+	# Underdamped springs: the body overshoots a little and settles, which
+	# reads as mass rather than as a value sliding to its target.
+	var omega := sqrt(lean_stiffness)
+	var damping := 2.0 * lean_damping_ratio * omega
+	_lean_roll_velocity += ((target_roll - _lean_roll) * lean_stiffness - damping * _lean_roll_velocity) * delta
+	_lean_roll += _lean_roll_velocity * delta
+	_torso_lean_velocity += ((target_torso - _torso_lean) * lean_stiffness - damping * _torso_lean_velocity) * delta
+	_torso_lean += _torso_lean_velocity * delta
+	_visual_root.rotation.x = 0.0
+	_visual_root.rotation.z = _lean_roll
+
+
+## Puts the Cossack back at the spawn point on foot.
+func respawn() -> void:
+	if _mounted:
+		_mounted = false
+		_horse.mounted = false
+		collision_layer = _normal_collision_layer
+		collision_mask = _normal_collision_mask
+		_visual_root.position = Vector3.ZERO
+		_spring_arm.spring_length = camera_distance
+	global_position = _spawn_position
+	velocity = Vector3.ZERO
+	_reset_momentum()
+	_visual_root.rotation = Vector3.ZERO
+	_camera_yaw.global_position = _camera_target_position()
+	release_animation()
+	_play_role(&"idle")
+
+
+func _reset_momentum() -> void:
+	_ground_speed = 0.0
+	_yaw_rate = 0.0
+	_pivoting = false
+	_landing_recovery = 0.0
+	_peak_fall_speed = 0.0
+	_lean_roll = 0.0
+	_lean_roll_velocity = 0.0
+	_torso_lean = 0.0
+	_torso_lean_velocity = 0.0
+	_dip = 0.0
+	_dip_velocity = 0.0
+	_slope_grade = 0.0
+	_move_speed = 0.0
+	if _ground_ik != null:
+		_ground_ik.reset()
+
+
+## Hands the animation back to locomotion after combat played its own clips.
+func release_animation() -> void:
+	_active_role = &""
+
+
+func is_mounted() -> bool:
+	return _mounted
+
+
+func idle_clip() -> StringName:
+	return _clips_by_role.get(&"idle", &"")
+
+
+func get_animation_player() -> AnimationPlayer:
+	return _animation_player
+
+
+func get_visual_root() -> Node3D:
+	return _visual_root
+
+
+func get_camera_yaw() -> Node3D:
+	return _camera_yaw
+
+
+func get_camera() -> Camera3D:
+	return _spring_arm.get_node_or_null("Camera3D") as Camera3D if _spring_arm != null else null
+
+
+func get_skeleton() -> Skeleton3D:
+	return get_node_or_null(skeleton_path) as Skeleton3D
 
 
 func _toggle_mount() -> void:
@@ -203,6 +672,7 @@ func _toggle_mount() -> void:
 		collision_layer = 0
 		collision_mask = 0
 		velocity = Vector3.ZERO
+		_reset_momentum()
 		_spring_arm.spring_length = camera_distance + 1.2
 		_play_role(&"idle")
 
@@ -259,6 +729,7 @@ func _dismount() -> void:
 		collision_mask = _normal_collision_mask
 		_visual_root.position = Vector3.ZERO
 		_visual_root.rotation = Vector3(0.0, _visual_root.rotation.y, 0.0)
+		_reset_momentum()
 		_spring_arm.spring_length = camera_distance
 		return
 
@@ -342,18 +813,24 @@ func _apply_clip_override(path: String, clip: StringName, role: StringName) -> v
 
 
 func _update_animation_state() -> void:
+	if _locomotion != null:
+		# The locomotion blend draws walk and run itself on top of this base;
+		# the player only holds the idle under it, or the jump in the air.
+		_play_role(&"idle" if is_on_floor() else &"jump")
+		_animation_player.speed_scale = 1.0
+		return
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
 	var next_role: StringName
 	if not is_on_floor():
 		next_role = &"jump"
-	elif horizontal_speed <= 0.05:
+	elif horizontal_speed <= 0.05 and absf(_yaw_rate) < 1.5:
 		next_role = &"idle"
 	elif horizontal_speed > (walk_speed + run_speed) * 0.5:
 		next_role = &"run"
 	else:
 		next_role = &"walk"
 	_play_role(next_role)
-	_sync_animation_to_ground(horizontal_speed, next_role)
+	_sync_animation_to_ground(maxf(horizontal_speed, absf(_yaw_rate) * 0.25), next_role)
 
 
 func _sync_animation_to_ground(horizontal_speed: float, role: StringName) -> void:
@@ -380,11 +857,3 @@ func _play_role(role: StringName) -> void:
 	_animation_player.advance(0.0)
 	_active_role = role
 
-
-func _turn_visual_toward(direction: Vector3, delta: float) -> void:
-	if direction.length_squared() <= 0.0001:
-		return
-	var local_direction: Vector3 = global_transform.basis.inverse() * direction
-	var target_yaw := atan2(-local_direction.x, -local_direction.z)
-	var weight := 1.0 - exp(-turn_speed * delta)
-	_visual_root.rotation.y = lerp_angle(_visual_root.rotation.y, target_yaw, weight)

@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" uid="uid://lsfq7xktvo0t" path="res://scripts/characters/player.gd" id="1_yewv4"]
 [ext_resource type="PackedScene" uid="uid://bq1s4h564dj1j" path="res://assets/models/herts_cossack_reference/character.tscn" id="2_76oj4"]
+[ext_resource type="Script" path="res://scripts/combat/player_combat.gd" id="3_combat"]
+[ext_resource type="Script" path="res://scripts/combat/health.gd" id="4_health"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_jyhfs"]
 radius = 0.4
@@ -9,7 +11,7 @@ height = 1.8
 
 [node name="Player" type="CharacterBody3D" unique_id=1490605642]
 collision_layer = 2
-collision_mask = 5
+collision_mask = 13
 script = ExtResource("1_yewv4")
 character_manifest_path = "res://assets/models/herts_cossack_reference/character.json"
 relax_idle_right_arm = true
@@ -35,3 +37,9 @@ spring_length = 2.9
 [node name="Camera3D" type="Camera3D" parent="CameraYaw/CameraPitch/SpringArm3D" unique_id=2053573022]
 current = true
 fov = 60.0
+
+[node name="Combat" type="Node" parent="."]
+script = ExtResource("3_combat")
+
+[node name="Health" type="Node" parent="Combat"]
+script = ExtResource("4_health")
