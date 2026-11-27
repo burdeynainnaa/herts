@@ -89,8 +89,8 @@ generation; adapting it to build individual regions is future work.
   (bone aims, spine bend and turn, foot offsets) plus their timing, reach, arc and
   damage, and bakes them into clips for each rig when combat starts.
 - Hits are resolved by reach and arc, not physics hitboxes; limb damage from the
-  design board will need per-bone hurtboxes later. The enemy model is a re-tinted
-  Cossack warrior placeholder until a Tatar character exists.
+  design board will need per-bone hurtboxes later. The enemy uses the rigged Crimean Tatar model (`assets/models/crimean_tatar`),
+  which shares the Cossack skeleton.
 
 ## On-foot movement
 
