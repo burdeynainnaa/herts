@@ -13,7 +13,7 @@ extends SkeletonModifier3D
 @export var max_foot_tilt_degrees: float = 32.0
 ## Ankle height of a flat planted foot, and the height above it at which the
 ## foot stops following the slope.
-@export var ankle_height: float = 0.11
+@export var ankle_height: float = 0.123
 @export var tilt_release_height: float = 0.14
 @export_flags_3d_physics var ground_mask: int = 1
 
@@ -45,6 +45,21 @@ var fidget_lift := PackedFloat32Array([0.0, 0.0])
 @export var fidget_lift_height: float = 0.035
 @export var fidget_lift_forward: float = 0.03
 
+## Sole clearance. The ankle ray alone lets the toe or heel poke through a
+## step or a slope, so each foot also samples the ground a heel's and a toe's
+## reach away and is raised until its sole clears both.
+@export var heel_reach: float = 0.07
+@export var toe_reach: float = 0.19
+@export var sole_margin: float = 0.006
+@export var clearance_follow_speed: float = 24.0
+## The foot bone's "up" in bone space, read from the rest pose, where the
+## foot stands flat (this rig's foot bone does not point along the foot).
+var _sole_axes: Array[Vector3] = []
+## How far past the slope the clip's foot may be pitched and still be swung
+## flat onto the ground.
+@export var sole_pitch_allowance_degrees: float = 40.0
+
+var _clearance := PackedFloat32Array([0.0, 0.0])
 var _legs: Array = []
 var _pelvis: int = -1
 var _foot_offsets := PackedFloat32Array([0.0, 0.0])
@@ -67,13 +82,29 @@ func _ready() -> void:
 			active = false
 			return
 		_legs.append(leg)
+		var rest_basis := skeleton.get_bone_global_rest(leg[2]).basis.orthonormalized()
+		_sole_axes.append((rest_basis.inverse() * Vector3.UP).normalized())
 
 
 ## Snaps the smoothing state, e.g. after a teleport or dismount.
 func reset() -> void:
 	_foot_offsets = PackedFloat32Array([0.0, 0.0])
+	_clearance = PackedFloat32Array([0.0, 0.0])
 	_pelvis_offset = 0.0
 	_locked = [false, false]
+
+
+## Ground height at a point, relative to the body's ground plane.
+func _ground_at(space: PhysicsDirectSpaceState3D, point: Vector3, ground_y: float, fallback: float) -> float:
+	var query := PhysicsRayQueryParameters3D.create(
+		Vector3(point.x, ground_y + max_step_height + 0.2, point.z),
+		Vector3(point.x, ground_y - max_step_height - 0.2, point.z), ground_mask
+	)
+	query.exclude = [body.get_rid()]
+	var hit := space.intersect_ray(query)
+	if hit.is_empty():
+		return fallback
+	return clampf((hit.position as Vector3).y - ground_y, -max_step_height, max_step_height)
 
 
 func _process_modification() -> void:
@@ -92,6 +123,8 @@ func _process_modification() -> void:
 	var foot_bases: Array[Basis] = []
 	var normals: Array[Vector3] = []
 	var heights: Array[float] = []
+	var heel_ground: Array[float] = []
+	var toe_ground: Array[float] = []
 
 	for i in _legs.size():
 		var foot: int = _legs[i][2]
@@ -113,6 +146,11 @@ func _process_modification() -> void:
 			normal = hit.normal
 		_foot_offsets[i] = lerpf(_foot_offsets[i], target, 1.0 - exp(-foot_follow_speed * delta))
 		normals.append(normal)
+		var forward := to_world.basis * Vector3(0.0, 0.0, 1.0)
+		forward.y = 0.0
+		forward = forward.normalized()
+		heel_ground.append(_ground_at(space, foot_world - forward * heel_reach, ground_y, target))
+		toe_ground.append(_ground_at(space, foot_world + forward * toe_reach, ground_y, target))
 
 	var pelvis_target := clampf(minf(minf(_foot_offsets[0], _foot_offsets[1]), 0.0), -max_pelvis_drop, 0.0)
 	_pelvis_offset = lerpf(_pelvis_offset, pelvis_target, 1.0 - exp(-pelvis_follow_speed * delta))
@@ -139,6 +177,22 @@ func _process_modification() -> void:
 		if fidget_lift[i] > 0.001:
 			target_world += Vector3.UP * fidget_lift_height * fidget_lift[i]
 			target_world += (to_world.basis * Vector3(0.0, 0.0, 1.0)).normalized() * fidget_lift_forward * fidget_lift[i]
+		# Sole clearance: lift the foot until heel and toe both clear the ground.
+		var lift_now: float = heights[i] - ankle_height
+		var plant_now := maxf(1.0 - clampf(lift_now / maxf(tilt_release_height, 0.001), 0.0, 1.0), stand_weight)
+		var flat_forward := to_world.basis * Vector3(0.0, 0.0, 1.0)
+		flat_forward.y = 0.0
+		flat_forward = flat_forward.normalized()
+		var slope := clampf(-normals[i].dot(flat_forward) / maxf(normals[i].y, 0.2), -tan(max_tilt), tan(max_tilt)) * plant_now
+		var sole_at_ankle := target_world.y - ground_y - ankle_height
+		var need := maxf(
+			heel_ground[i] - (sole_at_ankle - heel_reach * slope),
+			toe_ground[i] - (sole_at_ankle + toe_reach * slope)
+		) + sole_margin
+		_clearance[i] = lerpf(_clearance[i], maxf(need, 0.0), 1.0 - exp(-clearance_follow_speed * delta))
+		if need > _clearance[i]:
+			_clearance[i] = need
+		target_world.y += _clearance[i]
 		var plant_weight: float = stance[i]
 		if plant_weight > 0.01:
 			if not _locked[i] or _locks[i].distance_to(target_world) > max_lock_distance:
@@ -153,12 +207,15 @@ func _process_modification() -> void:
 		var lift: float = heights[i] - ankle_height
 		var plant := 1.0 - clampf(lift / maxf(tilt_release_height, 0.001), 0.0, 1.0)
 		plant = maxf(plant, stand_weight)
-		var up_skeleton := (to_skeleton.basis * Vector3.UP).normalized()
+		# Lay the sole on the ground: swing the animated sole normal onto the
+		# ground normal; the clip's own foot pitch is not flat.
+		var sole := (foot_bases[i] * _sole_axes[i]).normalized()
 		var normal_skeleton := (to_skeleton.basis * normals[i]).normalized()
-		var tilt := Quaternion(up_skeleton, normal_skeleton)
+		var tilt := Quaternion(sole, normal_skeleton)
 		var angle := tilt.get_angle()
-		if angle > max_tilt:
-			tilt = Quaternion.IDENTITY.slerp(tilt, max_tilt / angle)
+		var limit := max_tilt + deg_to_rad(sole_pitch_allowance_degrees)
+		if angle > limit:
+			tilt = Quaternion.IDENTITY.slerp(tilt, limit / angle)
 		tilt = Quaternion.IDENTITY.slerp(tilt, plant)
 		var foot_pose := skeleton.get_bone_global_pose(leg[2])
 		foot_pose.basis = Basis(tilt) * foot_bases[i]
