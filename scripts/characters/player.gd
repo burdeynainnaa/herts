@@ -56,8 +56,13 @@ const REQUIRED_ACTIONS: Array[StringName] = [
 
 @export_category("Procedural Body")
 @export var procedural_body: bool = true
-@export var head_look_max_yaw_degrees: float = 75.0
-@export var head_look_follow_speed: float = 4.0
+## The camera direction the head follows, up to this angle from the body;
+## BodyLayer splits it into head turn first, then a little torso turn.
+@export var head_look_max_yaw_degrees: float = 105.0
+## Small idle fidgets while standing still: adjusting the hat, shifting from
+## foot to foot, glancing about. Seconds between them, min and max.
+@export var idle_fidgets: bool = true
+@export var fidget_interval: Vector2 = Vector2(4.0, 9.0)
 ## Landing compression: metres of pelvis dip per m/s of fall speed.
 @export var landing_dip_per_speed: float = 0.25
 @export var exertion_gain_per_second: float = 0.08
@@ -132,6 +137,27 @@ var _slope_grade: float = 0.0
 var _move_speed: float = 0.0
 var _dip: float = 0.0
 var _dip_velocity: float = 0.0
+var _fidget: StringName = &""
+var _fidget_time: float = 0.0
+var _fidget_length: float = 1.0
+var _fidget_timer: float = 5.0
+var _fidget_side: float = 1.0
+var _last_fidget: StringName = &""
+## Per fidget channel: (value, velocity) of its spring.
+var _fidget_state: Dictionary = {}
+## Spring (natural frequency rad/s, damping ratio) for each fidget channel.
+## Every channel gets a soft start and a soft stop; the heavier the moving
+## part, the lower the frequency. Ratios below 1 let light parts overshoot a
+## touch, the hand at the hat is critically damped so it never pushes through.
+const FIDGET_SPRINGS := {
+	&"hat": Vector2(5.5, 1.0),
+	&"tug": Vector2(16.0, 0.55),
+	&"dip": Vector2(6.0, 0.9),
+	&"shift": Vector2(4.0, 0.8),
+	&"lift_left": Vector2(10.0, 0.7),
+	&"lift_right": Vector2(10.0, 0.7),
+	&"glance": Vector2(7.0, 0.8),
+}
 var _locomotion: LocomotionBlend
 var _body_layer: BodyLayer
 var _ground_ik: GroundIK
@@ -220,6 +246,101 @@ func _process(delta: float) -> void:
 		)
 
 
+## Idle fidgets. A calm stand picks one every few seconds and plays it as a
+## 0..1 envelope: the hand rises to the hat, the weight rocks from foot to
+## foot, or the head glances to one side. Anything that is not a calm stand
+## (walking, combat, mounting) lets the current one fade out at once.
+func _update_fidgets(delta: float, fighting: bool) -> void:
+	var calm: bool = idle_fidgets and _ground_ik.stand_weight > 0.95 and not fighting and not _mounted
+	# The hat needs the head roughly facing the hand: looking away ends it.
+	var looking_away := absf(_body_layer.look_yaw_target) > deg_to_rad(30.0)
+	if _fidget == &"":
+		if calm:
+			_fidget_timer -= delta
+			if _fidget_timer <= 0.0:
+				_start_fidget(looking_away)
+		_apply_fidget(0.0, delta)
+		return
+	var interrupted := not calm or (_fidget == &"hat" and looking_away)
+	_fidget_time += delta * (3.0 if interrupted else 1.0)
+	var u := _fidget_time / maxf(_fidget_length, 0.01)
+	if u >= 1.0 or (interrupted and u >= 0.3):
+		_fidget = &""
+		_fidget_timer = randf_range(fidget_interval.x, fidget_interval.y)
+		_apply_fidget(0.0, delta)
+		return
+	_apply_fidget(u, delta)
+
+
+func _start_fidget(looking_away: bool) -> void:
+	var choices: Array[StringName] = [&"hat", &"shift", &"glance"]
+	choices.erase(_last_fidget)
+	if looking_away:
+		choices.erase(&"hat")
+	_fidget = choices[randi() % choices.size()]
+	_last_fidget = _fidget
+	_fidget_time = 0.0
+	_fidget_side = 1.0 if randf() < 0.5 else -1.0
+	match _fidget:
+		&"hat":
+			_fidget_length = 2.6
+		&"shift":
+			_fidget_length = 3.0
+		&"glance":
+			_fidget_length = 2.2
+
+
+func _apply_fidget(u: float, delta: float) -> void:
+	# A plain ramp up, hold and ramp down: the springs below give it its
+	# soft start and soft stop.
+	var envelope := clampf(u / 0.18, 0.0, 1.0) * clampf((1.0 - u) / 0.22, 0.0, 1.0)
+	if u <= 0.0:
+		envelope = 0.0
+	var hat := 0.0
+	var tug := 0.0
+	var dip := 0.0
+	var shift := 0.0
+	var lift_left := 0.0
+	var lift_right := 0.0
+	var glance := 0.0
+	match _fidget:
+		&"hat":
+			hat = envelope
+			tug = sin(u * TAU * 2.5) * envelope * smoothstep(0.3, 0.45, u)
+			dip = deg_to_rad(5.0) * envelope
+		&"shift":
+			# Rock to one side, back through the middle and onto the other
+			# foot; the foot that is freed lifts and sets down.
+			shift = sin(u * TAU) * _fidget_side
+			var raised := clampf((absf(shift) - 0.5) * 2.0, 0.0, 1.0)
+			# +shift means weight on the left, which frees the right foot.
+			if shift > 0.0:
+				lift_right = raised
+			else:
+				lift_left = raised
+		&"glance":
+			glance = deg_to_rad(42.0) * _fidget_side * envelope
+	_body_layer.hat_reach = _fidget_spring(&"hat", hat, delta)
+	_body_layer.hat_tug = _fidget_spring(&"tug", tug, delta)
+	_body_layer.head_dip = _fidget_spring(&"dip", dip, delta)
+	_body_layer.glance_yaw = _fidget_spring(&"glance", glance, delta)
+	_ground_ik.fidget_shift = _fidget_spring(&"shift", shift, delta)
+	_ground_ik.fidget_lift = PackedFloat32Array([
+		maxf(_fidget_spring(&"lift_left", lift_left, delta), 0.0),
+		maxf(_fidget_spring(&"lift_right", lift_right, delta), 0.0),
+	])
+
+
+func _fidget_spring(channel: StringName, target: float, delta: float) -> float:
+	var spec: Vector2 = FIDGET_SPRINGS[channel]
+	var state: Vector2 = _fidget_state.get(channel, Vector2.ZERO)
+	var accel := (target - state.x) * spec.x * spec.x - 2.0 * spec.y * spec.x * state.y
+	state.y += accel * delta
+	state.x += state.y * delta
+	_fidget_state[channel] = state
+	return state.x
+
+
 ## Feeds the skeleton modifiers: which layers are on, how fast the stride
 ## clock runs, where the head looks, how the torso leans and breathes.
 func _update_procedural_layers(delta: float) -> void:
@@ -242,6 +363,7 @@ func _update_procedural_layers(delta: float) -> void:
 	_ground_ik.pelvis_extra = _dip
 	_ground_ik.stand_weight = (1.0 - _locomotion.move_weight) * _locomotion.influence
 	_body_layer.carry_weight = _ground_ik.stand_weight
+	_update_fidgets(delta, fighting)
 	_ground_ik.stance = PackedFloat32Array([_locomotion.stance_weight(0), _locomotion.stance_weight(1)])
 
 	_body_layer.active = not _mounted
@@ -261,9 +383,8 @@ func _update_procedural_layers(delta: float) -> void:
 			look_yaw = clampf(yaw, -reach, reach)
 			var pitch := asin(clampf(view.normalized().y, -1.0, 1.0)) - deg_to_rad(camera_pitch_degrees)
 			look_pitch = clampf(pitch * 0.7, deg_to_rad(-30.0), deg_to_rad(25.0))
-	var look_weight := 1.0 - exp(-head_look_follow_speed * delta)
-	_body_layer.look_yaw = lerp_angle(_body_layer.look_yaw, look_yaw, look_weight)
-	_body_layer.look_pitch = lerpf(_body_layer.look_pitch, look_pitch, look_weight)
+	_body_layer.look_yaw_target = look_yaw
+	_body_layer.look_pitch_target = look_pitch
 
 
 func _camera_target_position() -> Vector3:

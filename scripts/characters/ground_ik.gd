@@ -33,6 +33,18 @@ var stand_weight: float = 0.0
 ## Extra half-width of the standing stance, in metres per foot.
 @export var stand_spread: float = 0.045
 
+## Idle fidget, set by the controller: shifting weight from foot to foot.
+## fidget_shift is -1 .. +1 (+1 = weight on the left leg); the hips slide
+## over the weighted leg and tilt a little while the other foot is free.
+## fidget_lift is how far each foot (left, right) is raised, 0 .. 1; a raised
+## foot comes up and a little forward, then goes back down in place.
+var fidget_shift: float = 0.0
+var fidget_lift := PackedFloat32Array([0.0, 0.0])
+@export var fidget_hip_shift: float = 0.03
+@export var fidget_hip_roll_degrees: float = 2.5
+@export var fidget_lift_height: float = 0.035
+@export var fidget_lift_forward: float = 0.03
+
 var _legs: Array = []
 var _pelvis: int = -1
 var _foot_offsets := PackedFloat32Array([0.0, 0.0])
@@ -107,6 +119,10 @@ func _process_modification() -> void:
 
 	var hips := skeleton.get_bone_global_pose(_pelvis)
 	hips.origin += to_skeleton.basis * (Vector3.UP * (_pelvis_offset + pelvis_extra))
+	if absf(fidget_shift) > 0.001:
+		# The skeleton's +X is the character's left, +Z forward.
+		hips.origin += Vector3(1.0, 0.0, 0.0) * (fidget_hip_shift * fidget_shift) * 100.0
+		hips.basis = Basis(Vector3(0.0, 0.0, 1.0), deg_to_rad(fidget_hip_roll_degrees) * fidget_shift) * hips.basis
 	skeleton.set_bone_global_pose(_pelvis, hips)
 	skeleton.force_update_bone_child_transform(_pelvis)
 
@@ -120,6 +136,9 @@ func _process_modification() -> void:
 			# The skeleton's +X is the character's left.
 			var outward := Vector3(1.0 if i == 0 else -1.0, 0.0, 0.0)
 			target_world += (to_world.basis * outward).normalized() * stand_spread * stand_weight
+		if fidget_lift[i] > 0.001:
+			target_world += Vector3.UP * fidget_lift_height * fidget_lift[i]
+			target_world += (to_world.basis * Vector3(0.0, 0.0, 1.0)).normalized() * fidget_lift_forward * fidget_lift[i]
 		var plant_weight: float = stance[i]
 		if plant_weight > 0.01:
 			if not _locked[i] or _locks[i].distance_to(target_world) > max_lock_distance:
@@ -129,7 +148,7 @@ func _process_modification() -> void:
 			target_world = target_world.lerp(pinned, plant_weight)
 		else:
 			_locked[i] = false
-		_solve_two_bone(skeleton, leg[0], leg[1], leg[2], to_skeleton * target_world)
+		solve_two_bone(skeleton, leg[0], leg[1], leg[2], to_skeleton * target_world)
 		# Planted feet lie on the slope; a swinging foot keeps its clip angle.
 		var lift: float = heights[i] - ankle_height
 		var plant := 1.0 - clampf(lift / maxf(tilt_release_height, 0.001), 0.0, 1.0)
@@ -151,7 +170,7 @@ func _process_modification() -> void:
 ## the knee to reach the distance, then swings the whole chain to the target.
 ## The bend plane comes from the animated pose, so the knee points where the
 ## clip pointed it.
-static func _solve_two_bone(skeleton: Skeleton3D, upper: int, lower: int, end: int, target: Vector3) -> void:
+static func solve_two_bone(skeleton: Skeleton3D, upper: int, lower: int, end: int, target: Vector3) -> void:
 	var a := skeleton.get_bone_global_pose(upper).origin
 	var b := skeleton.get_bone_global_pose(lower).origin
 	var c := skeleton.get_bone_global_pose(end).origin

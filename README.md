@@ -116,12 +116,21 @@ sit on top of the clips:
   distance the body really travels divided by the stride length (1.45 m walk, 3.6 m run, both
   measured from the planted foot), so cadence follows speed and turning on the spot steps.
   It also reports how firmly each foot is planted for the IK below.
-- `scripts/characters/body_layer.gd` turns the spine, neck and head toward where the camera
-  looks (up to 75°, looks ahead again when the camera swings behind), leans the torso into
+- `scripts/characters/body_layer.gd` turns toward where the camera looks, head first: the head
+  and neck take the turn up to about 32°, past that the upper body adds half of the rest (up to
+  38°), on its own heavier spring so the head leads (with a slight overshoot) and the torso trails; each
+  chain bone turns about the vertical (up to 105° in all, looks
+  ahead again when the camera swings behind), leans the torso into
   slopes and against speed changes on an underdamped spring, breathes faster and deeper
   after a long run, and relaxes the shoulders: the clips hold the shoulder joints level with
   the neck (a shrug), so each clavicle is lowered until the joint sits 7 cm below the neck base
   while the upper arm keeps the clip's swing (`shoulder_depth_below_neck`, `shoulder_relax`).
+  Idle fidgets (`idle_fidgets`, `fidget_interval` on the Player) play every 4-9 s while standing
+  calm: the free hand rises to adjust the hat (two-bone IK to the brim), the weight rocks from foot
+  to foot (hips slide and tilt, the freed foot lifts and sets down), or the head glances aside.
+  Every fidget channel runs through its own spring (`FIDGET_SPRINGS` in player.gd) for a soft start and stop;
+  the hand at the hat is critically damped. The hat reach follows the head's own frame and lets go when
+  the head turns well away. They fade out at once when walking starts or combat begins.
 - `scripts/characters/ground_ik.gd` raycasts under each foot, keeps the clip's foot height
   relative to the real ground, drops the pelvis so the lower foot reaches, re-solves both legs
   with analytic two-bone IK (knee direction from the clip), tilts planted feet to the slope, and
