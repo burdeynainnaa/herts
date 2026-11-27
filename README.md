@@ -23,7 +23,8 @@ to run, Space to jump, and the mouse to look around. Press F near the horse to
 mount or dismount; use WASD to ride and hold Shift to gallop. Escape releases the mouse;
 click the game to capture it again. Press M to open or close the world map; Escape
 also closes the map. Left mouse swings the sabre (press again during the
-follow-through for a combo of up to three blows); hold right mouse to guard.
+follow-through to chain an overhead chop, a spinning sweep that cuts all around,
+and a lunging thrust); hold right mouse to guard.
 Guarding just before a blow lands parries it and staggers the attacker, and a
 staggered, wounded enemy is executed by the next blow, which refills stamina. The project uses the Forward+ renderer and
 Jolt 3D physics.
@@ -75,14 +76,18 @@ generation; adapting it to build individual regions is future work.
   the body may move; all tuning is exported on that node.
 - `scenes/characters/enemy_sabre_fighter.tscn` is the basic enemy
   (`scripts/combat/enemy_sabre_fighter.gd`): approach, circle in front of the camera,
-  telegraphed chop with a blade glint, random guard, stagger on parry. One fighter
+  telegraphed blow (one of the three, drawn at random) with a blade glint, random guard, stagger on parry. One fighter
   attacks at a time.
 - `scenes/combat/training_encounter.tscn` places the fighters; `main.tscn` instances
   it together with `scenes/ui/combat_hud.tscn` (Ukrainian HUD).
 - `scripts/combat/combat_kit.gd` holds the shared pieces. The Herts Cossack rig only
-  ships locomotion, so the chop and guard clips are borrowed at runtime from
+  ships locomotion, so the guard clip is borrowed at runtime from
   `assets/models/cossack_warrior/rig.glb`, which has the same skeleton. The sabre is
-  built in code (`scripts/combat/sabre.gd`) and attached to the right hand.
+  built in code (`scripts/combat/sabre.gd`), attached to the right hand, and draws a
+  fading trail while it cuts.
+- `scripts/combat/sabre_attacks.gd` keys the three blows by hand as readable poses
+  (bone aims, spine bend and turn, foot offsets) plus their timing, reach, arc and
+  damage, and bakes them into clips for each rig when combat starts.
 - Hits are resolved by reach and arc, not physics hitboxes; limb damage from the
   design board will need per-bone hurtboxes later. The enemy model is a re-tinted
   Cossack warrior placeholder until a Tatar character exists.
