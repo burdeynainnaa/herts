@@ -19,19 +19,19 @@ const REQUIRED_ACTIONS: Array[StringName] = [
 ## over time, so a running Cossack carries momentum, arcs through turns and has
 ## to plant and pivot to reverse.
 @export_category("Momentum")
-@export var walk_acceleration: float = 3.0
-@export var run_acceleration: float = 3.6
-@export var stop_deceleration: float = 6.5
-@export var slowdown_deceleration: float = 4.0
+@export var walk_acceleration: float = 4.2
+@export var run_acceleration: float = 5.2
+@export var stop_deceleration: float = 9.0
+@export var slowdown_deceleration: float = 5.6
 ## Braking used when the input points well behind a running body.
-@export var pivot_deceleration: float = 11.0
+@export var pivot_deceleration: float = 14.0
 ## Heading turn rate in degrees per second while standing and at full run.
 @export var turn_rate_standing: float = 260.0
-@export var turn_rate_running: float = 120.0
+@export var turn_rate_running: float = 150.0
 ## How fast the turn itself builds up and brakes, degrees per second squared,
 ## standing and at full run. Lower values make turns rounder and heavier.
-@export var turn_acceleration_standing: float = 800.0
-@export var turn_acceleration_running: float = 380.0
+@export var turn_acceleration_standing: float = 1100.0
+@export var turn_acceleration_running: float = 520.0
 ## Input this far behind the heading (degrees) while above walk speed plants the feet.
 @export var pivot_angle: float = 115.0
 @export var air_control: float = 0.12
@@ -212,7 +212,9 @@ func _process(delta: float) -> void:
 	if _idle_arm_modifier != null:
 		var target_influence := 1.0 if _active_role == &"idle" and not _mounted else 0.0
 		if _locomotion != null:
-			target_influence *= 1.0 - _locomotion.move_weight * _locomotion.influence
+			# The stand built from the walk already hangs the arms; this fix
+			# was for the shipped idle's raised arms.
+			target_influence *= 1.0 - _locomotion.influence
 		_idle_arm_modifier.influence = move_toward(
 			_idle_arm_modifier.influence, target_influence, delta / maxf(animation_blend_time, 0.001)
 		)
@@ -228,7 +230,8 @@ func _update_procedural_layers(delta: float) -> void:
 	var fade := delta / 0.15
 	_locomotion.influence = move_toward(_locomotion.influence, 1.0 if grounded and not fighting else 0.0, fade)
 	_locomotion.active = _locomotion.influence > 0.001
-	_locomotion.advance(delta, _move_speed, _yaw_rate)
+	var stick := Input.get_vector(&"move_left", &"move_right", &"move_forward", &"move_back")
+	_locomotion.advance(delta, _move_speed, _yaw_rate, stick.length() < 0.05)
 	_ground_ik.influence = move_toward(_ground_ik.influence, 1.0 if grounded else 0.0, fade)
 	_ground_ik.active = _ground_ik.influence > 0.001
 
@@ -237,6 +240,8 @@ func _update_procedural_layers(delta: float) -> void:
 	_dip_velocity += (-_dip * dip_omega * dip_omega - 2.0 * 0.55 * dip_omega * _dip_velocity) * delta
 	_dip = clampf(_dip + _dip_velocity * delta, -0.3, 0.05)
 	_ground_ik.pelvis_extra = _dip
+	_ground_ik.stand_weight = (1.0 - _locomotion.move_weight) * _locomotion.influence
+	_body_layer.carry_weight = _ground_ik.stand_weight
 	_ground_ik.stance = PackedFloat32Array([_locomotion.stance_weight(0), _locomotion.stance_weight(1)])
 
 	_body_layer.active = not _mounted

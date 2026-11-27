@@ -27,6 +27,11 @@ var pelvis_extra: float = 0.0
 var stance := PackedFloat32Array([0.0, 0.0])
 ## A pinned foot further than this from its animated spot is let go.
 @export var max_lock_distance: float = 0.4
+## 0 = walking, 1 = standing; set by the controller. A standing body puts
+## both feet flat on the ground and a little wider than the walk's track.
+var stand_weight: float = 0.0
+## Extra half-width of the standing stance, in metres per foot.
+@export var stand_spread: float = 0.045
 
 var _legs: Array = []
 var _pelvis: int = -1
@@ -109,6 +114,12 @@ func _process_modification() -> void:
 	for i in _legs.size():
 		var leg: Array = _legs[i]
 		var target_world: Vector3 = feet_world[i] + Vector3.UP * _foot_offsets[i]
+		if stand_weight > 0.001:
+			var planted_y := ground_y + _foot_offsets[i] + ankle_height
+			target_world.y = lerpf(target_world.y, planted_y, stand_weight)
+			# The skeleton's +X is the character's left.
+			var outward := Vector3(1.0 if i == 0 else -1.0, 0.0, 0.0)
+			target_world += (to_world.basis * outward).normalized() * stand_spread * stand_weight
 		var plant_weight: float = stance[i]
 		if plant_weight > 0.01:
 			if not _locked[i] or _locks[i].distance_to(target_world) > max_lock_distance:
@@ -122,6 +133,7 @@ func _process_modification() -> void:
 		# Planted feet lie on the slope; a swinging foot keeps its clip angle.
 		var lift: float = heights[i] - ankle_height
 		var plant := 1.0 - clampf(lift / maxf(tilt_release_height, 0.001), 0.0, 1.0)
+		plant = maxf(plant, stand_weight)
 		var up_skeleton := (to_skeleton.basis * Vector3.UP).normalized()
 		var normal_skeleton := (to_skeleton.basis * normals[i]).normalized()
 		var tilt := Quaternion(up_skeleton, normal_skeleton)
