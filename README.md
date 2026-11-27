@@ -87,6 +87,46 @@ generation; adapting it to build individual regions is future work.
   design board will need per-bone hurtboxes later. The enemy model is a re-tinted
   Cossack warrior placeholder until a Tatar character exists.
 
+## On-foot movement
+
+`scripts/characters/player.gd` uses weighted, heading-driven locomotion. Input only
+says where the Cossack wants to face and how fast; the body turns toward it with angular
+momentum: the turn builds up, cruises (up to 260°/s standing, 120°/s at a run) and brakes
+into the new heading, so a standing about-face takes about a second and always travels along its own heading, so
+he arcs through turns instead of strafing. Speed builds and bleeds off over time; pulling
+back against a run plants the feet, brakes, then pivots. Uphill slows him, downhill helps
+a little, hard landings cost speed and briefly block jumping, and running into walls kills
+momentum. The whole body leans into turns and against acceleration. All tuning is exported
+under Momentum, Landing and Body Lean on the Player. Combat still owns facing and speed
+while a swing, guard or stagger plays.
+
+## Procedural animation layer
+
+Three skeleton modifiers on the player's `Skeleton3D` (created in `player.gd`, in this order)
+sit on top of the clips:
+
+- `scripts/characters/locomotion_blend.gd` samples Idle, WalkStoic and RunSprint together and
+  blends them by speed, so there is no hard walk/run switch. Walk and run share one stride
+  phase (the run's contacts lag the walk's by 0.27 of a cycle), and the phase advances by the
+  distance the body really travels divided by the stride length (1.45 m walk, 3.6 m run, both
+  measured from the planted foot), so cadence follows speed and turning on the spot steps.
+  It also reports how firmly each foot is planted for the IK below.
+- `scripts/characters/body_layer.gd` turns the spine, neck and head toward where the camera
+  looks (up to 75°, looks ahead again when the camera swings behind), leans the torso into
+  slopes and against speed changes on an underdamped spring, and breathes faster and deeper
+  after a long run.
+- `scripts/characters/ground_ik.gd` raycasts under each foot, keeps the clip's foot height
+  relative to the real ground, drops the pelvis so the lower foot reaches, re-solves both legs
+  with analytic two-bone IK (knee direction from the clip), tilts planted feet to the slope, and
+  pins each foot to where it landed for its contact window. Landing compresses the pelvis on a
+  spring while the feet stay planted.
+
+The AnimationPlayer still plays Idle (or Jump in the air) underneath; the locomotion layer fades
+out while combat owns the animation or the Cossack is airborne, and the IK and body layers are
+off while mounted. Set `procedural_body` off on the Player to fall back to the old clip
+switching. Measured in play: planted-foot slip is about 0.1 m/s at a 1.4 m/s walk and about
+0.2 m/s at a 6 m/s sprint.
+
 ## The walk clip
 
 The character package ships a walk with a strong pelvis sway. `scripts/characters/stoic_walk.gd`
