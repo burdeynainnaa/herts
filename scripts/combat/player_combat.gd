@@ -56,6 +56,7 @@ var _sabre: Sabre
 var _combo_index: int = 0
 var _clip: StringName = &""
 var _dust_raised: bool = false
+var _previous_clip_time: float = 0.0
 var _body_yaw: float = 0.0
 var _combo_buffered: bool = false
 var _hit_targets: Array[Node] = []
@@ -243,6 +244,7 @@ func _start_attack(chained: bool) -> void:
 	_clip = clip
 	_combo_buffered = false
 	_dust_raised = false
+	_previous_clip_time = 0.0
 	_hit_targets.clear()
 	_spend_stamina(cost)
 	_attack_target = _pick_target()
@@ -267,8 +269,10 @@ func _update_attack(delta: float) -> void:
 		_dust_raised = true
 		CombatKit.burst(get_tree().current_scene, _player.global_position + _facing() * 0.4 + Vector3.UP * 0.05,
 			Color(0.42, 0.35, 0.25), 26, 2.2, 0.03, 5.0)
-	if t >= float(blow["hit_start"]) and t <= float(blow["hit_end"]):
+	# Overlap rather than containment, so a long frame cannot skip the window.
+	if t >= float(blow["hit_start"]) and _previous_clip_time <= float(blow["hit_end"]):
 		_sweep_hits(blow)
+	_previous_clip_time = t
 	if Input.is_action_pressed(&"block") and t > float(blow["hit_end"]) + 0.15:
 		_enter_guard()
 		return

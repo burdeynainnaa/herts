@@ -76,7 +76,7 @@ func _ready() -> void:
 	for clip in [&"Idle", &"Walk", &"Run"]:
 		if _anim.has_animation(clip):
 			_anim.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
-	_sabre = CombatKit.arm_with_sabre(_skeleton, sabre_steel)
+	_sabre = CombatKit.arm_with_sabre(_skeleton, sabre_steel, CombatKit.WARRIOR_GRIP_CENTER)
 	CombatKit.install_clips(_anim, _skeleton, _visual_root, &"Idle", _sabre.transform.basis)
 	_body_yaw = _body_pivot.rotation.y
 	_tint_body()

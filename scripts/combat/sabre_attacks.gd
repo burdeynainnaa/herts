@@ -9,8 +9,8 @@ extends RefCounted
 ## THRUST    a deep lunge, front knee bent, back leg long, point first.
 ##
 ## Keys are written as poses a person can read: where each arm segment and the
-## blade point, how far the hips drop, how the spine bends and turns, where each
-## foot stands. Directions are in body space, Vector3(right, up, forward); feet
+## blade point (and the axis the blade swings about, which sets the edge), how
+## far the hips drop, how the spine bends and turns, where each foot stands. Directions are in body space, Vector3(right, up, forward); feet
 ## are offsets in metres from where they stand in the idle pose. Baking aims
 ## the bones at those directions and solves the legs so the feet stay put.
 
@@ -28,22 +28,22 @@ const ALL: Array[StringName] = [OVERHEAD, SPIN, THRUST]
 ## spin     when the whole body turns once round (SPIN only)
 const DATA := {
 	OVERHEAD: {
-		"raised": 0.42, "hit_start": 0.5, "hit_end": 0.66, "settled": 0.98, "end": 1.3,
+		"raised": 0.38, "hit_start": 0.5, "hit_end": 0.64, "settled": 0.95, "end": 1.25,
 		"damage": 1.35, "reach": 2.5, "arc": 45.0, "stamina": 1.2,
-		"lunge_start": 0.4, "lunge_end": 0.62, "lunge_speed": 2.8,
-		"dust_at": 0.6, "trail_start": 0.46, "trail_end": 0.72,
+		"lunge_start": 0.42, "lunge_end": 0.6, "lunge_speed": 2.4,
+		"dust_at": 0.6, "trail_start": 0.46, "trail_end": 0.68,
 	},
 	SPIN: {
-		"raised": 0.3, "hit_start": 0.4, "hit_end": 0.88, "settled": 1.12, "end": 1.5,
+		"raised": 0.3, "hit_start": 0.4, "hit_end": 0.88, "settled": 1.1, "end": 1.45,
 		"damage": 0.9, "reach": 2.7, "arc": 180.0, "stamina": 1.4,
-		"lunge_start": 0.3, "lunge_end": 0.85, "lunge_speed": 1.2,
-		"spin_start": 0.3, "spin_end": 0.76, "dust_at": 0.5, "trail_start": 0.34, "trail_end": 0.92,
+		"lunge_start": 0.3, "lunge_end": 0.85, "lunge_speed": 1.0,
+		"spin_start": 0.3, "spin_end": 0.74, "dust_at": 0.5, "trail_start": 0.36, "trail_end": 0.9,
 	},
 	THRUST: {
-		"raised": 0.26, "hit_start": 0.33, "hit_end": 0.47, "settled": 0.8, "end": 1.15,
+		"raised": 0.22, "hit_start": 0.3, "hit_end": 0.44, "settled": 0.8, "end": 1.15,
 		"damage": 1.15, "reach": 3.2, "arc": 25.0, "stamina": 1.0,
-		"lunge_start": 0.24, "lunge_end": 0.42, "lunge_speed": 6.0,
-		"dust_at": 0.4, "trail_start": 0.3, "trail_end": 0.5,
+		"lunge_start": 0.22, "lunge_end": 0.38, "lunge_speed": 5.5,
+		"dust_at": 0.36, "trail_start": 0.26, "trail_end": 0.46,
 	},
 }
 
@@ -54,193 +54,213 @@ static func data(clip: StringName) -> Dictionary:
 
 # --- The poses ----------------------------------------------------------------
 
-## The ready stance every blow starts from and settles back into: sabre held
-## forward and up on the right, left hand loose at the hip, knees soft.
-static func _ready_pose() -> Dictionary:
+## Swing axes (body space) for "r_swing": the blade turns about this axis, and
+## the cutting edge faces the way the blade travels.
+const _DOWNWARD := Vector3(1.0, 0.0, 0.0)  # over the top and down the front
+const _ACROSS := Vector3(0.0, -1.0, 0.0)  # flat, from the right across to the left
+
+## The stand the blows start from and settle into: both arms hanging easy,
+## sabre held low with the point forward and down, as in the idle.
+static func _rest_pose() -> Dictionary:
 	return {
-		"hips": {"drop": 0.05, "turn": 8.0},
-		"spine": {"bend": 6.0, "turn": -6.0},
-		"r_arm": Vector3(0.35, -0.75, 0.45), "r_fore": Vector3(0.1, 0.05, 1.0),
-		"r_hand": Vector3(-0.05, 0.75, 0.7), "r_edge": Vector3(0.0, 0.2, 1.0),
-		"l_arm": Vector3(-0.3, -0.95, 0.1), "l_fore": Vector3(0.05, -0.6, 0.8),
-		"r_foot": Vector3(0.04, 0.0, 0.08), "l_foot": Vector3(-0.04, 0.0, -0.06),
+		"r_arm": Vector3(0.24, -1.0, 0.05), "r_fore": Vector3(0.05, -0.9, 0.4),
+		"r_hand": Vector3(0.17, -0.54, 0.83), "r_swing": _DOWNWARD,
+		"l_arm": Vector3(-0.24, -1.0, 0.02), "l_fore": Vector3(-0.03, -1.0, 0.12),
 	}
 
 
+## Every blow follows the same order of effort: hips start the move, the
+## chest follows, the arm comes last and the blade lags behind the hand. The
+## head counter-turns to keep the eyes on the target, and the free arm stays
+## bent and close, working against the sword arm for balance.
 static func _keys(clip: StringName) -> Array:
-	var ready := _ready_pose()
+	var rest := _rest_pose()
 	match clip:
 		OVERHEAD:
 			return [
-				[0.0, ready],
-				# Draw back: weight onto the back foot, sabre swept up behind the head.
-				[0.24, {
-					"hips": {"drop": 0.02, "turn": 22.0, "bend": -4.0},
-					"spine": {"bend": -10.0, "turn": 18.0, "tilt": -6.0},
-					"head": {"turn": -24.0, "bend": 8.0},
-					"r_arm": Vector3(0.5, 0.75, -0.25), "r_fore": Vector3(-0.2, 0.9, -0.5),
-					"r_hand": Vector3(-0.3, -0.2, -1.0), "r_edge": Vector3(0.0, 1.0, 0.0),
-					"l_arm": Vector3(-0.25, 0.1, 1.0), "l_fore": Vector3(-0.05, 0.35, 1.0),
-					"r_foot": Vector3(0.06, 0.0, -0.1), "l_foot": Vector3(-0.04, 0.03, 0.02),
-				}],
-				# Fully cocked, blade hanging down the back.
-				[0.42, {
-					"hips": {"drop": 0.0, "turn": 26.0, "bend": -6.0},
-					"spine": {"bend": -16.0, "turn": 22.0, "tilt": -8.0},
-					"head": {"turn": -26.0, "bend": 12.0},
-					"r_arm": Vector3(0.4, 0.95, -0.2), "r_fore": Vector3(-0.25, 0.6, -0.85),
-					"r_hand": Vector3(-0.2, -0.75, -0.6), "r_edge": Vector3(0.0, 0.6, -0.6),
-					"l_arm": Vector3(-0.2, 0.3, 1.0), "l_fore": Vector3(0.0, 0.5, 1.0),
-					"r_foot": Vector3(0.06, 0.0, -0.12), "l_foot": Vector3(-0.04, 0.06, 0.1),
-				}],
-				# Coming over the top: blade straight up above the head.
-				[0.5, {
-					"hips": {"drop": 0.06, "turn": 10.0},
-					"spine": {"bend": -2.0, "turn": 6.0},
+				[0.0, rest],
+				# Lift: sword hand rises in front, the point coming up first...
+				[0.14, {
+					"hips": {"drop": 0.03, "turn": 8.0},
+					"spine": {"bend": -3.0, "turn": 10.0},
 					"head": {"turn": -10.0},
-					"r_arm": Vector3(0.25, 1.0, 0.35), "r_fore": Vector3(0.0, 0.9, 0.5),
-					"r_hand": Vector3(0.0, 0.5, 1.0), "r_edge": Vector3(0.0, 1.0, 0.3),
-					"l_arm": Vector3(-0.2, -0.2, 1.0), "l_fore": Vector3(-0.1, -0.2, 1.0),
-					"r_foot": Vector3(0.06, 0.0, -0.12), "l_foot": Vector3(-0.05, 0.04, 0.3),
+					"r_arm": Vector3(0.45, -0.1, 0.6), "r_fore": Vector3(0.05, 0.8, 0.55),
+					"r_hand": Vector3(0.0, 0.95, 0.3), "r_swing": _DOWNWARD,
+					"l_arm": Vector3(-0.15, -0.5, 0.8), "l_fore": Vector3(0.1, -0.15, 1.0),
+					"r_foot": Vector3(0.0, 0.0, -0.06),
 				}],
-				# Crashing down through the front, front foot planted.
-				[0.58, {
-					"hips": {"drop": 0.14, "turn": -8.0, "bend": 8.0},
-					"spine": {"bend": 18.0, "turn": -10.0},
+				# ...then laid back over the shoulder as the elbow climbs.
+				[0.27, {
+					"hips": {"drop": 0.04, "turn": 15.0, "bend": -3.0},
+					"spine": {"bend": -9.0, "turn": 17.0},
+					"head": {"turn": -18.0, "bend": 4.0},
+					"r_arm": Vector3(0.45, 0.6, 0.2), "r_fore": Vector3(0.0, 0.85, -0.35),
+					"r_hand": Vector3(0.0, 0.35, -0.95), "r_swing": _DOWNWARD,
+					"l_arm": Vector3(-0.12, -0.3, 0.95), "l_fore": Vector3(0.08, 0.05, 1.0),
+					"r_foot": Vector3(0.01, 0.0, -0.1), "l_foot": Vector3(0.0, 0.01, 0.02),
+				}],
+				# Cocked: elbow high, hand behind the head, blade down the back.
+				[0.38, {
+					"hips": {"drop": 0.04, "turn": 18.0, "bend": -6.0},
+					"spine": {"bend": -12.0, "turn": 20.0},
+					"head": {"turn": -22.0, "bend": 8.0},
+					"r_arm": Vector3(0.4, 0.85, -0.05), "r_fore": Vector3(-0.05, 0.55, -0.8),
+					"r_hand": Vector3(0.0, -0.55, -0.85), "r_swing": _DOWNWARD,
+					"l_arm": Vector3(-0.1, -0.2, 1.0), "l_fore": Vector3(0.05, 0.2, 1.0),
+					"r_foot": Vector3(0.02, 0.0, -0.12), "l_foot": Vector3(0.0, 0.02, 0.04),
+				}],
+				# Driving up out of the cock: elbow leads, blade comes up past vertical.
+				[0.45, {
+					"hips": {"drop": 0.05, "turn": 12.0, "bend": -2.0},
+					"spine": {"bend": -6.0, "turn": 12.0},
+					"head": {"turn": -14.0, "bend": 4.0},
+					"r_arm": Vector3(0.35, 0.95, 0.1), "r_fore": Vector3(0.0, 0.85, -0.3),
+					"r_hand": Vector3(0.0, 0.95, -0.3), "r_swing": _DOWNWARD,
+					"l_arm": Vector3(-0.18, -0.4, 0.8), "l_fore": Vector3(-0.02, -0.15, 0.9),
+					"r_foot": Vector3(0.02, 0.0, -0.13), "l_foot": Vector3(-0.01, 0.01, 0.16),
+				}],
+				# Over the top as the front foot steps in; the guard hand pulls back.
+				[0.5, {
+					"hips": {"drop": 0.08, "turn": 6.0, "bend": 4.0},
+					"spine": {"bend": 4.0, "turn": 4.0},
+					"head": {"turn": -6.0},
+					"r_arm": Vector3(0.25, 0.95, 0.3), "r_fore": Vector3(0.05, 0.85, 0.5),
+					"r_hand": Vector3(0.0, 0.55, 0.85), "r_swing": _DOWNWARD,
+					"l_arm": Vector3(-0.25, -0.6, 0.5), "l_fore": Vector3(-0.1, -0.5, 0.6),
+					"r_foot": Vector3(0.02, 0.0, -0.15), "l_foot": Vector3(-0.02, 0.0, 0.3),
+				}],
+				[0.57, {
+					"hips": {"drop": 0.15, "turn": -8.0, "bend": 10.0},
+					"spine": {"bend": 16.0, "turn": -10.0},
 					"head": {"bend": -10.0, "turn": 8.0},
-					"r_arm": Vector3(0.2, 0.25, 1.0), "r_fore": Vector3(0.05, -0.25, 1.0),
-					"r_hand": Vector3(0.0, -0.55, 1.0), "r_edge": Vector3(0.0, -1.0, 0.2),
-					"l_arm": Vector3(-0.3, -0.7, -0.3), "l_fore": Vector3(-0.1, -0.6, -0.6),
-					"r_foot": Vector3(0.06, 0.0, -0.18), "l_foot": Vector3(-0.06, 0.0, 0.42),
+					"r_arm": Vector3(0.15, 0.3, 1.0), "r_fore": Vector3(0.05, -0.2, 1.0),
+					"r_hand": Vector3(0.0, -0.45, 1.0), "r_swing": _DOWNWARD,
+					"l_arm": Vector3(-0.4, -0.7, -0.3), "l_fore": Vector3(-0.15, -0.7, -0.4),
+					"r_foot": Vector3(0.03, 0.0, -0.18), "l_foot": Vector3(-0.03, 0.0, 0.38),
 				}],
-				# Follow-through: blade low in front, body folded over it.
-				[0.68, {
-					"hips": {"drop": 0.2, "turn": -12.0, "bend": 12.0},
-					"spine": {"bend": 26.0, "turn": -12.0},
-					"head": {"bend": -16.0, "turn": 10.0},
-					"r_arm": Vector3(0.25, -0.55, 0.85), "r_fore": Vector3(0.0, -0.75, 0.7),
-					"r_hand": Vector3(-0.1, -1.0, 0.35), "r_edge": Vector3(0.0, -0.3, 1.0),
-					"l_arm": Vector3(-0.45, -0.55, -0.6), "l_fore": Vector3(-0.2, -0.4, -0.85),
-					"r_foot": Vector3(0.06, 0.02, -0.22), "l_foot": Vector3(-0.06, 0.0, 0.44),
+				# Cut through: weight on the front foot, blade low in front.
+				[0.64, {
+					"hips": {"drop": 0.18, "turn": -10.0, "bend": 14.0},
+					"spine": {"bend": 24.0, "turn": -10.0},
+					"head": {"bend": -18.0, "turn": 10.0},
+					"r_arm": Vector3(0.2, -0.35, 0.95), "r_fore": Vector3(0.05, -0.75, 0.7),
+					"r_hand": Vector3(0.0, -0.95, 0.35), "r_swing": _DOWNWARD,
+					"l_arm": Vector3(-0.45, -0.75, -0.4), "l_fore": Vector3(-0.2, -0.6, -0.6),
+					"r_foot": Vector3(0.03, 0.0, -0.18), "l_foot": Vector3(-0.03, 0.0, 0.38),
 				}],
-				[0.9, {
-					"hips": {"drop": 0.16, "turn": -6.0, "bend": 8.0},
-					"spine": {"bend": 18.0, "turn": -8.0},
-					"head": {"bend": -10.0, "turn": 6.0},
-					"r_arm": Vector3(0.3, -0.7, 0.7), "r_fore": Vector3(0.05, -0.5, 0.9),
-					"r_hand": Vector3(-0.05, -0.6, 0.8), "r_edge": Vector3(0.0, -0.3, 1.0),
-					"l_arm": Vector3(-0.4, -0.85, -0.2), "l_fore": Vector3(-0.1, -0.7, -0.3),
-					"r_foot": Vector3(0.06, 0.0, -0.18), "l_foot": Vector3(-0.06, 0.0, 0.38),
+				[0.82, {
+					"hips": {"drop": 0.12, "turn": -5.0, "bend": 8.0},
+					"spine": {"bend": 12.0, "turn": -5.0},
+					"head": {"bend": -8.0, "turn": 5.0},
+					"r_arm": Vector3(0.25, -0.75, 0.6), "r_fore": Vector3(0.05, -0.5, 0.85),
+					"r_hand": Vector3(0.05, -0.55, 0.85), "r_swing": _DOWNWARD,
+					"l_arm": Vector3(-0.3, -0.95, -0.1), "l_fore": Vector3(-0.1, -0.9, 0.2),
+					"r_foot": Vector3(0.03, 0.0, -0.12), "l_foot": Vector3(-0.03, 0.0, 0.28),
 				}],
-				[1.3, ready],
+				[1.25, rest],
 			]
 		SPIN:
 			return [
-				[0.0, ready],
-				# Wind against the turn: torso twisted right, sabre trailing low behind.
-				[0.26, {
-					"hips": {"drop": 0.12, "turn": 30.0, "bend": 6.0},
-					"spine": {"bend": 10.0, "turn": 34.0, "tilt": 4.0},
-					"head": {"turn": -40.0},
-					"r_arm": Vector3(0.85, -0.35, -0.4), "r_fore": Vector3(0.6, -0.2, -0.8),
-					"r_hand": Vector3(0.2, -0.15, -1.0), "r_edge": Vector3(1.0, 0.0, 0.0),
-					"l_arm": Vector3(0.35, -0.35, 0.85), "l_fore": Vector3(0.75, -0.1, 0.6),
-					"r_foot": Vector3(0.1, 0.0, -0.08), "l_foot": Vector3(-0.1, 0.0, 0.08),
+				[0.0, rest],
+				# Wind against the turn: hips and chest twisted right, blade trailing low.
+				[0.22, {
+					"hips": {"drop": 0.1, "turn": 35.0},
+					"spine": {"bend": 6.0, "turn": 30.0},
+					"head": {"turn": -45.0},
+					"r_arm": Vector3(0.7, -0.3, -0.55), "r_fore": Vector3(0.55, -0.1, -0.8),
+					"r_hand": Vector3(0.3, -0.1, -0.95), "r_swing": _ACROSS,
+					"l_arm": Vector3(0.25, -0.4, 0.85), "l_fore": Vector3(0.7, -0.1, 0.6),
+					"r_foot": Vector3(0.05, 0.0, -0.05), "l_foot": Vector3(-0.05, 0.0, 0.05),
 				}],
-				# Turning: arms flung wide, blade flat at chest height, trailing.
-				[0.42, {
-					"hips": {"drop": 0.1, "turn": 6.0},
-					"spine": {"bend": 4.0, "turn": 8.0, "tilt": 6.0},
-					"head": {"turn": -18.0},
-					"r_arm": Vector3(1.0, -0.05, -0.15), "r_fore": Vector3(1.0, 0.05, -0.25),
-					"r_hand": Vector3(0.85, 0.05, -0.55), "r_edge": Vector3(0.3, 0.0, 1.0),
-					"l_arm": Vector3(-1.0, -0.15, 0.1), "l_fore": Vector3(-1.0, 0.0, 0.25),
-					"r_foot": Vector3(0.1, 0.0, -0.04), "l_foot": Vector3(-0.1, 0.0, 0.04),
+				# Turning on the spot: sword arm long at chest height, blade trailing,
+				# body leaning away from it; the free arm stays bent and tucked.
+				[0.4, {
+					"hips": {"drop": 0.1},
+					"spine": {"bend": 4.0, "turn": 6.0, "tilt": -6.0},
+					"head": {"turn": -10.0},
+					"r_arm": Vector3(0.95, -0.15, 0.05), "r_fore": Vector3(0.95, -0.05, -0.1),
+					"r_hand": Vector3(0.85, 0.0, -0.5), "r_swing": _ACROSS,
+					"l_arm": Vector3(-0.6, -0.6, 0.35), "l_fore": Vector3(-0.3, -0.4, 0.8),
 				}],
-				[0.62, {
-					"hips": {"drop": 0.1, "turn": 0.0},
-					"spine": {"bend": 4.0, "turn": 4.0, "tilt": 8.0},
-					"head": {"turn": -12.0},
-					"r_arm": Vector3(1.0, 0.0, -0.05), "r_fore": Vector3(1.0, 0.05, -0.1),
-					"r_hand": Vector3(0.95, 0.05, -0.3), "r_edge": Vector3(0.1, 0.0, 1.0),
-					"l_arm": Vector3(-1.0, -0.2, 0.0), "l_fore": Vector3(-1.0, -0.05, 0.2),
-					"r_foot": Vector3(0.1, 0.0, -0.04), "l_foot": Vector3(-0.1, 0.0, 0.04),
+				[0.6, {
+					"hips": {"drop": 0.1},
+					"spine": {"bend": 4.0, "turn": 4.0, "tilt": -8.0},
+					"head": {"turn": -8.0},
+					"r_arm": Vector3(0.95, -0.1, 0.2), "r_fore": Vector3(0.95, 0.0, 0.1),
+					"r_hand": Vector3(0.95, 0.0, -0.25), "r_swing": _ACROSS,
+					"l_arm": Vector3(-0.6, -0.6, 0.3), "l_fore": Vector3(-0.3, -0.4, 0.8),
 				}],
-				# Coming round to the front: blade swings from the right side across.
-				[0.76, {
-					"hips": {"drop": 0.14, "turn": -10.0},
-					"spine": {"bend": 8.0, "turn": -12.0, "tilt": 4.0},
-					"head": {"turn": 6.0},
-					"r_arm": Vector3(0.75, 0.0, 0.7), "r_fore": Vector3(0.45, 0.05, 0.9),
-					"r_hand": Vector3(0.6, 0.05, 0.8), "r_edge": Vector3(-0.8, 0.0, 0.6),
-					"l_arm": Vector3(-0.95, -0.25, -0.2), "l_fore": Vector3(-0.85, -0.1, -0.4),
-					"r_foot": Vector3(0.12, 0.0, 0.0), "l_foot": Vector3(-0.12, 0.0, 0.0),
+				# The turn comes round and the blade sweeps across the front.
+				[0.74, {
+					"hips": {"drop": 0.12, "turn": -12.0},
+					"spine": {"bend": 6.0, "turn": -15.0},
+					"head": {"turn": 5.0},
+					"r_arm": Vector3(0.55, -0.05, 0.85), "r_fore": Vector3(0.2, 0.0, 1.0),
+					"r_hand": Vector3(0.25, 0.0, 0.97), "r_swing": _ACROSS,
+					"l_arm": Vector3(-0.6, -0.65, -0.1), "l_fore": Vector3(-0.4, -0.5, -0.6),
 				}],
-				# Sweep finished across the left, torso wound the other way.
-				[0.9, {
-					"hips": {"drop": 0.16, "turn": -28.0, "bend": 4.0},
-					"spine": {"bend": 10.0, "turn": -34.0, "tilt": -4.0},
+				[0.86, {
+					"hips": {"drop": 0.12, "turn": -30.0},
+					"spine": {"bend": 8.0, "turn": -32.0},
 					"head": {"turn": 30.0},
-					"r_arm": Vector3(-0.35, -0.05, 0.95), "r_fore": Vector3(-0.85, 0.0, 0.5),
-					"r_hand": Vector3(-1.0, 0.0, -0.1), "r_edge": Vector3(-0.2, 0.0, -1.0),
-					"l_arm": Vector3(-0.7, -0.5, -0.5), "l_fore": Vector3(-0.4, -0.3, -0.85),
-					"r_foot": Vector3(0.12, 0.0, 0.04), "l_foot": Vector3(-0.12, 0.0, -0.06),
+					"r_arm": Vector3(-0.3, -0.15, 0.95), "r_fore": Vector3(-0.85, -0.05, 0.5),
+					"r_hand": Vector3(-0.95, -0.05, 0.15), "r_swing": _ACROSS,
+					"l_arm": Vector3(-0.55, -0.8, -0.25), "l_fore": Vector3(-0.3, -0.6, -0.6),
+					"r_foot": Vector3(0.04, 0.0, 0.04), "l_foot": Vector3(-0.04, 0.0, -0.04),
 				}],
-				[1.1, {
-					"hips": {"drop": 0.12, "turn": -16.0, "bend": 4.0},
-					"spine": {"bend": 8.0, "turn": -20.0},
-					"head": {"turn": 18.0},
-					"r_arm": Vector3(-0.1, -0.5, 0.85), "r_fore": Vector3(-0.5, -0.2, 0.85),
-					"r_hand": Vector3(-0.7, 0.2, 0.6), "r_edge": Vector3(-0.3, 0.0, -1.0),
-					"l_arm": Vector3(-0.45, -0.85, -0.25), "l_fore": Vector3(-0.2, -0.6, -0.5),
-					"r_foot": Vector3(0.08, 0.0, 0.06), "l_foot": Vector3(-0.08, 0.0, -0.06),
+				[1.05, {
+					"hips": {"drop": 0.08, "turn": -15.0},
+					"spine": {"bend": 6.0, "turn": -18.0},
+					"head": {"turn": 15.0},
+					"r_arm": Vector3(0.0, -0.75, 0.65), "r_fore": Vector3(-0.3, -0.55, 0.75),
+					"r_hand": Vector3(-0.3, -0.45, 0.85), "r_swing": _ACROSS,
+					"l_arm": Vector3(-0.3, -0.95, -0.1), "l_fore": Vector3(-0.1, -0.9, 0.2),
 				}],
-				[1.5, ready],
+				[1.45, rest],
 			]
 		THRUST:
 			return [
-				[0.0, ready],
-				# Coil: weight back, sword hand drawn to the hip, point aimed ahead.
-				[0.24, {
-					"hips": {"drop": 0.12, "turn": 24.0, "bend": -2.0},
-					"spine": {"bend": 2.0, "turn": 16.0},
-					"head": {"turn": -30.0},
-					"r_arm": Vector3(0.3, -0.45, -0.85), "r_fore": Vector3(0.05, 0.1, 1.0),
-					"r_hand": Vector3(-0.05, 0.08, 1.0), "r_edge": Vector3(0.0, -1.0, 0.0),
-					"l_arm": Vector3(-0.15, 0.0, 1.0), "l_fore": Vector3(0.05, 0.15, 1.0),
-					"r_foot": Vector3(0.06, 0.0, 0.0), "l_foot": Vector3(-0.04, 0.0, -0.2),
+				[0.0, rest],
+				# Coil: weight back, sword hand drawn to the hip with the point on
+				# the target, free hand reaching out to aim.
+				[0.22, {
+					"hips": {"drop": 0.1, "turn": 25.0, "bend": -2.0},
+					"spine": {"turn": 15.0},
+					"head": {"turn": -35.0},
+					"r_arm": Vector3(0.35, -0.55, -0.75), "r_fore": Vector3(0.1, 0.05, 1.0),
+					"r_hand": Vector3(0.0, 0.05, 1.0), "r_edge": Vector3(0.0, -1.0, 0.0),
+					"l_arm": Vector3(-0.1, -0.1, 1.0), "l_fore": Vector3(0.0, 0.2, 1.0),
+					"r_foot": Vector3(0.04, 0.0, 0.02), "l_foot": Vector3(-0.02, 0.0, -0.15),
 				}],
-				# Full lunge: front knee deep, back leg long, free arm thrown back.
-				[0.38, {
-					"hips": {"drop": 0.3, "shift": Vector3(0.0, 0.0, 0.22), "turn": -28.0, "bend": 10.0},
-					"spine": {"bend": 12.0, "turn": -16.0},
-					"head": {"turn": 38.0, "bend": -8.0},
-					"r_arm": Vector3(0.0, 0.08, 1.0), "r_fore": Vector3(-0.02, 0.06, 1.0),
-					"r_hand": Vector3(-0.02, 0.04, 1.0), "r_edge": Vector3(0.0, -1.0, 0.0),
-					"l_arm": Vector3(-0.45, 0.05, -1.0), "l_fore": Vector3(-0.2, 0.35, -1.0),
-					"r_foot": Vector3(0.06, 0.0, 0.7), "l_foot": Vector3(-0.08, 0.0, -0.4),
-					"l_foot_roll": -30.0,
+				# Full lunge: front knee deep, back leg long, free arm swept back.
+				[0.36, {
+					"hips": {"drop": 0.28, "shift": Vector3(0.0, 0.0, 0.18), "turn": -25.0, "bend": 8.0},
+					"spine": {"bend": 8.0, "turn": -15.0},
+					"head": {"turn": 35.0, "bend": -6.0},
+					"r_arm": Vector3(0.0, 0.06, 1.0), "r_fore": Vector3(0.0, 0.04, 1.0),
+					"r_hand": Vector3(0.0, 0.02, 1.0), "r_edge": Vector3(0.0, -1.0, 0.0),
+					"l_arm": Vector3(-0.45, -0.2, -0.85), "l_fore": Vector3(-0.2, 0.35, -0.9),
+					"r_foot": Vector3(0.06, 0.0, 0.68), "l_foot": Vector3(-0.08, 0.0, -0.38),
 				}],
-				[0.58, {
-					"hips": {"drop": 0.28, "shift": Vector3(0.0, 0.0, 0.2), "turn": -24.0, "bend": 8.0},
-					"spine": {"bend": 10.0, "turn": -14.0},
-					"head": {"turn": 34.0, "bend": -6.0},
-					"r_arm": Vector3(0.05, 0.0, 1.0), "r_fore": Vector3(0.0, 0.02, 1.0),
-					"r_hand": Vector3(0.0, 0.0, 1.0), "r_edge": Vector3(0.0, -1.0, 0.0),
-					"l_arm": Vector3(-0.45, -0.1, -1.0), "l_fore": Vector3(-0.2, 0.15, -1.0),
-					"r_foot": Vector3(0.06, 0.0, 0.7), "l_foot": Vector3(-0.08, 0.0, -0.4),
-					"l_foot_roll": -30.0,
+				[0.55, {
+					"hips": {"drop": 0.26, "shift": Vector3(0.0, 0.0, 0.16), "turn": -22.0, "bend": 6.0},
+					"spine": {"bend": 6.0, "turn": -13.0},
+					"head": {"turn": 32.0, "bend": -5.0},
+					"r_arm": Vector3(0.05, 0.0, 1.0), "r_fore": Vector3(0.02, 0.0, 1.0),
+					"r_hand": Vector3(0.02, -0.02, 1.0), "r_edge": Vector3(0.0, -1.0, 0.0),
+					"l_arm": Vector3(-0.45, -0.25, -0.85), "l_fore": Vector3(-0.25, 0.0, -0.95),
+					"r_foot": Vector3(0.06, 0.0, 0.68), "l_foot": Vector3(-0.08, 0.0, -0.38),
 				}],
-				[0.82, {
-					"hips": {"drop": 0.14, "shift": Vector3(0.0, 0.0, 0.1), "turn": -6.0, "bend": 4.0},
-					"spine": {"bend": 8.0, "turn": -8.0},
-					"head": {"turn": 12.0},
-					"r_arm": Vector3(0.25, -0.5, 0.8), "r_fore": Vector3(0.05, 0.0, 1.0),
-					"r_hand": Vector3(-0.05, 0.4, 0.9), "r_edge": Vector3(0.0, -0.4, 1.0),
-					"l_arm": Vector3(-0.35, -0.9, -0.1), "l_fore": Vector3(0.0, -0.6, 0.6),
-					"r_foot": Vector3(0.05, 0.0, 0.35), "l_foot": Vector3(-0.05, 0.0, -0.2),
+				[0.8, {
+					"hips": {"drop": 0.12, "shift": Vector3(0.0, 0.0, 0.06), "turn": -6.0, "bend": 3.0},
+					"spine": {"bend": 4.0, "turn": -5.0},
+					"head": {"turn": 8.0},
+					"r_arm": Vector3(0.25, -0.6, 0.75), "r_fore": Vector3(0.05, -0.3, 0.95),
+					"r_hand": Vector3(0.1, -0.4, 0.9), "r_swing": _DOWNWARD,
+					"l_arm": Vector3(-0.3, -0.95, -0.05), "l_fore": Vector3(-0.05, -0.9, 0.3),
+					"r_foot": Vector3(0.05, 0.0, 0.32), "l_foot": Vector3(-0.05, 0.0, -0.15),
 				}],
-				[1.15, ready],
+				[1.15, rest],
 			]
 	return []
 
@@ -401,10 +421,13 @@ class _Baker:
 			_aim_arm(prefix, spec.get(side + "_arm"), spec.get(side + "_fore"))
 			if spec.has(side + "_hand"):
 				var edge = spec.get(side + "_edge")
+				if edge == null and spec.has(side + "_swing"):
+					# The edge leads: it faces the way the blade turns about the swing axis.
+					edge = (spec[side + "_swing"] as Vector3).cross((spec[side + "_hand"] as Vector3).normalized())
 				_aim(prefix + "Hand", _dir(spec[side + "_hand"]), _edge_axis, _dir(edge) if edge != null else Vector3.ZERO, _blade_axis)
 		for side in ["r", "l"]:
 			var prefix := "Right" if side == "r" else "Left"
-			_place_leg(prefix, spec.get(side + "_foot", Vector3.ZERO), float(spec.get(side + "_foot_roll", 0.0)))
+			_place_leg(prefix, spec.get(side + "_foot", Vector3.ZERO))
 
 	# Body-space helpers ---------------------------------------------------------
 
@@ -472,7 +495,7 @@ class _Baker:
 
 	## Two-bone leg: puts the ankle at its idle spot plus the offset, knee
 	## toward the toes, foot flat and pointing where it pointed in idle.
-	func _place_leg(prefix: String, foot_offset: Vector3, roll_degrees: float) -> void:
+	func _place_leg(prefix: String, foot_offset: Vector3) -> void:
 		var upper := prefix + "UpLeg"
 		var lower := prefix + "Leg"
 		var foot := prefix + "Foot"
@@ -496,10 +519,6 @@ class _Baker:
 		_aim(lower, (ankle - knee).normalized(), shin_reference.inverse() * forward, pole)
 		var pose := _global(foot)
 		pose.basis = base_foot.basis
-		if roll_degrees != 0.0:
-			# Rolls a trailing foot up onto its toes.
-			var across := _dir(Vector3(1.0, 0.0, 0.0))
-			pose.basis = Basis(across, deg_to_rad(roll_degrees)) * pose.basis
 		_set_global(foot, pose)
 
 	static func _perpendicular(vector: Vector3, axis: Vector3) -> Vector3:
