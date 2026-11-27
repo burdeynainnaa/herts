@@ -4,7 +4,8 @@ extends CharacterBody3D
 ## meant to be the first fight. It closes in, circles at sword's length, then
 ## raises the sabre (the blade glints) and chops. A parry staggers it; a
 ## staggered, wounded fighter can be executed. Only one fighter in the
-## encounter attacks at a time.
+## encounter attacks at a time. Each attack is one of the three sabre blows
+## (SabreAttacks), drawn at random.
 
 signal health_changed(current: float, maximum: float)
 signal defeated
@@ -32,8 +33,9 @@ enum State { IDLE, CHASE, CIRCLE, WINDUP, STRIKE, RECOVER, GUARD, STAGGER, DEAD 
 @export var arc_degrees: float = 55.0
 @export var attack_cooldown_min: float = 1.8
 @export var attack_cooldown_max: float = 3.2
-@export var windup_speed: float = 0.95
-@export var strike_speed: float = 1.25
+@export var windup_speed: float = 0.55
+@export var strike_speed: float = 1.05
+@export var recover_speed: float = 1.0
 
 @export_category("Defence")
 @export var guard_chance: float = 0.3
@@ -62,6 +64,8 @@ var _sabre: Sabre
 var _struck: bool = false
 var _clip: StringName = &""
 var _react_tween: Tween
+var _blow_clip: StringName = SabreAttacks.OVERHEAD
+var _body_yaw: float = 0.0
 
 
 func _ready() -> void:
@@ -72,8 +76,9 @@ func _ready() -> void:
 	for clip in [&"Idle", &"Walk", &"Run"]:
 		if _anim.has_animation(clip):
 			_anim.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
-	CombatKit.install_clips(_anim)
 	_sabre = CombatKit.arm_with_sabre(_skeleton, sabre_steel)
+	CombatKit.install_clips(_anim, _skeleton, _visual_root, &"Idle", _sabre.transform.basis)
+	_body_yaw = _body_pivot.rotation.y
 	_tint_body()
 	health.changed.connect(func(current: float, maximum: float) -> void: health_changed.emit(current, maximum))
 	health.died.connect(_on_died)
@@ -149,22 +154,25 @@ func _physics_process(delta: float) -> void:
 					_state_time = 0.0
 		State.WINDUP:
 			_face(to_player, delta * 0.8)
-			if _clip_time() >= CombatKit.CHOP_RAISED:
+			if _clip_time() >= _blow("raised"):
 				_set_state(State.STRIKE)
 				_anim.speed_scale = strike_speed
 				_struck = false
 		State.STRIKE:
 			var t := _clip_time()
-			if t <= CombatKit.CHOP_HIT_END and distance > 1.3:
-				move = _facing() * 1.6
-			if not _struck and t >= CombatKit.CHOP_HIT_START:
+			_strike_effects(t)
+			if t >= _blow("lunge_start") and t <= _blow("lunge_end") and distance > 1.3:
+				move = _facing() * minf(_blow("lunge_speed"), 3.5)
+			if not _struck and t >= _blow("hit_start"):
 				_struck = true
 				_land_blow()
-			if state == State.STRIKE and t >= CombatKit.CHOP_HIT_END + 0.1:
+			if state == State.STRIKE and t >= _blow("hit_end") + 0.1:
 				_set_state(State.RECOVER)
-				_anim.speed_scale = 1.4
+				_anim.speed_scale = recover_speed
 		State.RECOVER:
-			if _clip_time() >= CombatKit.CHOP_SETTLED:
+			_strike_effects(_clip_time())
+			if _clip_time() >= _blow("settled"):
+				_end_strike_effects()
 				_release_token()
 				_cooldown = randf_range(attack_cooldown_min, attack_cooldown_max)
 				_set_state(State.CIRCLE)
@@ -185,19 +193,23 @@ func _physics_process(delta: float) -> void:
 
 func _start_windup() -> void:
 	_set_state(State.WINDUP)
+	_blow_clip = SabreAttacks.ALL.pick_random()
 	_anim.speed_scale = windup_speed
-	_anim.play(CombatKit.CHOP, 0.15)
+	_anim.play(_blow_clip, 0.15)
 	_anim.seek(0.0, true)
-	_clip = CombatKit.CHOP
+	_clip = _blow_clip
 	_sabre.glint()
 
 
 func _land_blow() -> void:
 	if _player_combat == null or not _player_combat.is_alive():
 		return
-	if not CombatKit.in_strike_arc(global_position, _facing(), _player.global_position, reach, arc_degrees):
+	var blow := SabreAttacks.data(_blow_clip)
+	var blow_reach := maxf(reach, float(blow["reach"]) - 0.3)
+	var blow_arc := maxf(arc_degrees, float(blow["arc"]))
+	if not CombatKit.in_strike_arc(global_position, _facing(), _player.global_position, blow_reach, blow_arc):
 		return
-	var result := _player_combat.receive_hit(self, damage)
+	var result := _player_combat.receive_hit(self, damage * float(blow["damage"]))
 	if result == "parried":
 		_release_token()
 		_enter_stagger()
@@ -238,6 +250,7 @@ func take_hit(attacker: Node3D, amount: float) -> String:
 
 
 func _enter_guard() -> void:
+	_end_strike_effects()
 	_set_state(State.GUARD)
 	_anim.speed_scale = 0.6
 	_anim.play(CombatKit.GUARD, 0.1)
@@ -246,6 +259,7 @@ func _enter_guard() -> void:
 
 
 func _enter_stagger() -> void:
+	_end_strike_effects()
 	_set_state(State.STAGGER)
 	_anim.speed_scale = 1.0
 	_play(&"Idle", 0.1)
@@ -254,6 +268,7 @@ func _enter_stagger() -> void:
 
 func _on_died(_source: Node) -> void:
 	_release_token()
+	_end_strike_effects()
 	_set_state(State.DEAD)
 	collision_layer = 0
 	_anim.speed_scale = 1.0
@@ -269,11 +284,12 @@ func _on_died(_source: Node) -> void:
 ## Puts the fighter back where it started, alive. Called when the player respawns.
 func reset_encounter() -> void:
 	_release_token()
+	_end_strike_effects()
 	health.reset()
 	collision_layer = 8
 	global_transform = _home
 	velocity = Vector3.ZERO
-	_body_pivot.rotation = Vector3.ZERO
+	_body_pivot.rotation = Vector3(0.0, _body_yaw, 0.0)
 	_visual_root.rotation = Vector3.ZERO
 	_cooldown = 1.5
 	_anim.speed_scale = 1.0
@@ -284,6 +300,7 @@ func reset_encounter() -> void:
 
 func _disengage() -> void:
 	_release_token()
+	_end_strike_effects()
 	_set_state(State.IDLE)
 	_play(&"Idle")
 
@@ -304,9 +321,31 @@ func _play(clip: StringName, blend: float = 0.2) -> void:
 
 
 func _clip_time() -> float:
-	if _anim.current_animation != String(CombatKit.CHOP):
-		return CombatKit.CHOP_END
+	if _anim.current_animation != String(_blow_clip):
+		return 100.0
 	return _anim.current_animation_position
+
+
+func _blow(key: String) -> float:
+	return float(SabreAttacks.data(_blow_clip)[key])
+
+
+## Blade trail and, for the spinning sweep, the body's turn on the spot.
+func _strike_effects(t: float) -> void:
+	if t >= _blow("trail_start") and t <= _blow("trail_end"):
+		_sabre.start_trail()
+	else:
+		_sabre.stop_trail()
+	var blow := SabreAttacks.data(_blow_clip)
+	if blow.has("spin_start"):
+		var turn := clampf(inverse_lerp(float(blow["spin_start"]), float(blow["spin_end"]), t), 0.0, 1.0)
+		_body_pivot.rotation.y = _body_yaw + TAU * smoothstep(0.0, 1.0, turn)
+
+
+func _end_strike_effects() -> void:
+	if _sabre != null:
+		_sabre.stop_trail()
+	_body_pivot.rotation.y = _body_yaw
 
 
 func _take_token() -> bool:

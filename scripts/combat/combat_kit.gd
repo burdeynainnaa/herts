@@ -4,24 +4,19 @@ extends RefCounted
 ## hit effects and hit-stop. Player and enemies use the same pieces.
 
 ## The Herts Cossack rig ships only locomotion; the Cossack warrior rig has the
-## same 24-bone skeleton plus a two-handed chop and a high guard. Both clips are
-## copied into any AnimationPlayer that drives that skeleton.
+## same 24-bone skeleton plus a high guard. The guard is copied into any
+## AnimationPlayer that drives that skeleton, and the three sabre blows
+## (SabreAttacks) are baked for it.
 const CLIP_SOURCE := "res://assets/models/cossack_warrior/rig.glb"
-const CHOP := &"SabreChop"
 const GUARD := &"SabreGuard"
-const _SOURCE_NAMES := {CHOP: &"Attack", GUARD: &"Block1"}
-
-## Key moments of the chop clip, in clip seconds (measured from the hand path).
-const CHOP_RAISED := 0.83
-const CHOP_HIT_START := 0.9
-const CHOP_HIT_END := 1.12
-const CHOP_SETTLED := 1.85
-const CHOP_END := 2.83
+const _SOURCE_NAMES := {GUARD: &"Block1"}
 
 static var _clips: Dictionary = {}
 
 
-static func install_clips(player: AnimationPlayer) -> bool:
+## grip is the sabre's basis in RightHand space (see arm_with_sabre).
+static func install_clips(player: AnimationPlayer, skeleton: Skeleton3D, body: Node3D, idle_clip: StringName,
+		grip: Basis) -> bool:
 	if _clips.is_empty():
 		var scene := load(CLIP_SOURCE) as PackedScene
 		if scene == null:
@@ -41,7 +36,6 @@ static func install_clips(player: AnimationPlayer) -> bool:
 				return false
 			_clips[clip] = anim.duplicate(true)
 		source.free()
-		(_clips[CHOP] as Animation).loop_mode = Animation.LOOP_NONE
 		(_clips[GUARD] as Animation).loop_mode = Animation.LOOP_PINGPONG
 	var library := player.get_animation_library(&"")
 	if library == null:
@@ -49,7 +43,7 @@ static func install_clips(player: AnimationPlayer) -> bool:
 	for clip in _clips:
 		if not library.has_animation(clip):
 			library.add_animation(clip, _clips[clip])
-	return true
+	return SabreAttacks.install(player, skeleton, body, idle_clip, grip)
 
 
 ## Puts a sabre in the right hand of a character's skeleton.

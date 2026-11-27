@@ -2,8 +2,9 @@ class_name PlayerCombat
 extends Node
 ## The Cossack's sabre fighting, as a child of the player controller.
 ##
-## Attack (LMB): a chop that chains into a three-blow combo when pressed again
-## during the follow-through. Guard (hold RMB): blocks blows from the front at a
+## Attack (LMB): three sabre blows that chain when pressed again during the
+## follow-through: an overhead chop, a spinning sweep that cuts all around, and
+## a lunging thrust (SabreAttacks). Guard (hold RMB): blocks blows from the front at a
 ## stamina cost. Pressing guard just before a blow lands parries it and staggers
 ## the attacker; striking a staggered, wounded enemy executes it and refills
 ## stamina. The controller asks this node whether it owns the animation and how
@@ -18,13 +19,10 @@ enum State { IDLE, ATTACK, GUARD, STAGGER, DEAD }
 
 @export_category("Sabre")
 @export var attack_damage: float = 22.0
-@export var combo_damage_bonus: Array[float] = [1.0, 1.0, 1.5]
-@export var attack_reach: float = 2.5
-@export var attack_arc_degrees: float = 65.0
-@export var attack_speed: float = 1.75
-@export var first_attack_start: float = 0.42
-@export var chained_attack_start: float = 0.58
-@export var lunge_speed: float = 2.6
+## The blows in combo order; each press during a follow-through moves one on.
+@export var combo: Array[StringName] = [SabreAttacks.OVERHEAD, SabreAttacks.SPIN, SabreAttacks.THRUST]
+@export var attack_speed: float = 1.15
+@export var chained_attack_start: float = 0.08
 @export var soft_lock_range: float = 7.0
 
 @export_category("Guard")
@@ -56,6 +54,9 @@ var _body_pivot: Node3D
 var _camera: Camera3D
 var _sabre: Sabre
 var _combo_index: int = 0
+var _clip: StringName = &""
+var _dust_raised: bool = false
+var _body_yaw: float = 0.0
 var _combo_buffered: bool = false
 var _hit_targets: Array[Node] = []
 var _attack_target: Node3D
@@ -82,13 +83,18 @@ func _ready() -> void:
 	_visual_root = _player.get_visual_root()
 	_body_pivot = _visual_root.get_node_or_null("Character") as Node3D
 	_camera = _player.get_camera()
-	if _anim == null or not CombatKit.install_clips(_anim):
+	var skeleton := _player.get_skeleton()
+	if _anim == null or skeleton == null:
+		push_error("PlayerCombat: player has no AnimationPlayer or skeleton")
+		set_physics_process(false)
+		return
+	_sabre = CombatKit.arm_with_sabre(skeleton)
+	if not CombatKit.install_clips(_anim, skeleton, _visual_root, _player.idle_clip(), _sabre.transform.basis):
 		push_error("PlayerCombat: could not install sabre clips")
 		set_physics_process(false)
 		return
-	var skeleton := _player.get_skeleton()
-	if skeleton != null:
-		_sabre = CombatKit.arm_with_sabre(skeleton)
+	if _body_pivot != null:
+		_body_yaw = _body_pivot.rotation.y
 	stamina_changed.emit(stamina, max_stamina)
 
 
@@ -108,9 +114,10 @@ func filter_velocity(desired: Vector3) -> Vector3:
 			return desired
 		State.ATTACK:
 			var t := _clip_time()
-			if t >= CombatKit.CHOP_RAISED - 0.05 and t <= CombatKit.CHOP_HIT_END:
-				if _attack_target == null or _flat_distance(_attack_target) > 1.4:
-					return _facing() * lunge_speed
+			var blow := SabreAttacks.data(_clip)
+			if t >= blow["lunge_start"] and t <= blow["lunge_end"]:
+				if _attack_target == null or not is_instance_valid(_attack_target) or _flat_distance(_attack_target) > 1.3:
+					return _facing() * float(blow["lunge_speed"])
 			return Vector3.ZERO
 		_:
 			return Vector3.ZERO
@@ -150,7 +157,7 @@ func _request_attack() -> void:
 		State.IDLE, State.GUARD:
 			_start_attack(false)
 		State.ATTACK:
-			if _clip_time() >= CombatKit.CHOP_HIT_START and _combo_index < combo_damage_bonus.size() - 1:
+			if _clip_time() >= _blow("hit_start") and _combo_index < combo.size() - 1:
 				_combo_buffered = true
 
 
@@ -158,7 +165,7 @@ func _request_guard() -> void:
 	var now := Time.get_ticks_msec()
 	var spamming := now - _last_guard_press_ms < int(parry_cooldown * 1000.0)
 	_last_guard_press_ms = now
-	if state == State.ATTACK and _clip_time() < CombatKit.CHOP_HIT_END + 0.15:
+	if state == State.ATTACK and _clip_time() < _blow("hit_end") + 0.15:
 		return
 	if state in [State.IDLE, State.ATTACK, State.GUARD]:
 		_guard_started_ms = -100000 if spamming else now
@@ -224,48 +231,81 @@ func _set_stamina(value: float) -> void:
 # --- Attack --------------------------------------------------------------------
 
 func _start_attack(chained: bool) -> void:
-	if stamina < attack_cost * 0.5:
-		announce.emit("Бракує сил")
-		return
 	_combo_index = (_combo_index + 1) if chained else 0
+	var clip: StringName = combo[_combo_index]
+	var cost := attack_cost * float(SabreAttacks.data(clip)["stamina"])
+	if stamina < cost * 0.5:
+		announce.emit("Бракує сил")
+		_combo_index = 0
+		_combo_buffered = false
+		return
+	_end_attack_effects()
+	_clip = clip
 	_combo_buffered = false
+	_dust_raised = false
 	_hit_targets.clear()
-	_spend_stamina(attack_cost)
+	_spend_stamina(cost)
 	_attack_target = _pick_target()
 	state = State.ATTACK
 	_anim.speed_scale = attack_speed
-	_anim.play(CombatKit.CHOP, 0.08)
-	_anim.seek(chained_attack_start if chained else first_attack_start, true)
+	_anim.play(_clip, 0.06 if chained else 0.1)
+	_anim.seek(chained_attack_start if chained else 0.0, true)
 
 
 func _update_attack(delta: float) -> void:
 	var t := _clip_time()
-	if t < CombatKit.CHOP_HIT_START:
+	var blow := SabreAttacks.data(_clip)
+	if t < float(blow["hit_start"]):
 		_turn_toward_target(delta, 16.0)
-	if t >= CombatKit.CHOP_HIT_START and t <= CombatKit.CHOP_HIT_END:
-		_sweep_hits()
-	if Input.is_action_pressed(&"block") and t > CombatKit.CHOP_HIT_END + 0.15:
+	_spin_body(t, blow)
+	if _sabre != null:
+		if t >= float(blow["trail_start"]) and t <= float(blow["trail_end"]):
+			_sabre.start_trail()
+		else:
+			_sabre.stop_trail()
+	if not _dust_raised and t >= float(blow["dust_at"]):
+		_dust_raised = true
+		CombatKit.burst(get_tree().current_scene, _player.global_position + _facing() * 0.4 + Vector3.UP * 0.05,
+			Color(0.42, 0.35, 0.25), 26, 2.2, 0.03, 5.0)
+	if t >= float(blow["hit_start"]) and t <= float(blow["hit_end"]):
+		_sweep_hits(blow)
+	if Input.is_action_pressed(&"block") and t > float(blow["hit_end"]) + 0.15:
 		_enter_guard()
 		return
-	if _combo_buffered and t >= CombatKit.CHOP_HIT_END + 0.12:
+	if _combo_buffered and t >= float(blow["hit_end"]) + 0.12:
 		_start_attack(true)
 		return
-	if t >= CombatKit.CHOP_SETTLED or not _anim.is_playing():
+	if t >= float(blow["settled"]) or not _anim.is_playing():
 		_combo_index = 0
 		_return_to_idle()
 
 
-func _sweep_hits() -> void:
+## The spinning sweep turns the whole body once round; the visual root keeps
+## its heading, so aim and hit arcs are unaffected.
+func _spin_body(t: float, blow: Dictionary) -> void:
+	if _body_pivot == null or not blow.has("spin_start"):
+		return
+	var turn := inverse_lerp(float(blow["spin_start"]), float(blow["spin_end"]), t)
+	_body_pivot.rotation.y = _body_yaw + TAU * smoothstep(0.0, 1.0, clampf(turn, 0.0, 1.0))
+
+
+func _end_attack_effects() -> void:
+	if _sabre != null:
+		_sabre.stop_trail()
+	if _body_pivot != null:
+		_body_pivot.rotation.y = _body_yaw
+
+
+func _sweep_hits(blow: Dictionary) -> void:
 	var origin := _player.global_position
 	var forward := _facing()
 	for enemy in CombatKit.living_enemies(get_tree(), origin):
 		if enemy in _hit_targets:
 			continue
-		if not CombatKit.in_strike_arc(origin, forward, enemy.global_position, attack_reach, attack_arc_degrees):
+		if not CombatKit.in_strike_arc(origin, forward, enemy.global_position, float(blow["reach"]), float(blow["arc"])):
 			continue
 		_hit_targets.append(enemy)
-		var damage := attack_damage * combo_damage_bonus[mini(_combo_index, combo_damage_bonus.size() - 1)]
-		var result: String = enemy.take_hit(_player, damage)
+		var result: String = enemy.take_hit(_player, attack_damage * float(blow["damage"]))
 		_on_attack_result(enemy, result)
 
 
@@ -278,7 +318,7 @@ func _on_attack_result(enemy: Node3D, result: String) -> void:
 			CombatKit.hit_stop(get_tree(), 0.05, 0.1)
 			_spend_stamina(6.0)
 			_flinch(0.12, 6.0)
-			_combo_index = combo_damage_bonus.size()
+			_combo_index = combo.size()
 			_combo_buffered = false
 		"hit":
 			CombatKit.burst(get_tree().current_scene, chest, Color(0.45, 0.02, 0.02), 22, 3.2)
@@ -348,6 +388,7 @@ func _face(direction: Vector3, weight: float) -> void:
 func _enter_guard() -> void:
 	if state == State.GUARD:
 		return
+	_end_attack_effects()
 	state = State.GUARD
 	_anim.speed_scale = 0.6
 	_anim.play(CombatKit.GUARD, 0.1)
@@ -392,6 +433,7 @@ func receive_hit(attacker: Node3D, damage: float) -> String:
 
 
 func _stagger(seconds: float) -> void:
+	_end_attack_effects()
 	state = State.STAGGER
 	_stagger_left = seconds
 	_combo_buffered = false
@@ -411,12 +453,14 @@ func _flinch(seconds: float, degrees: float) -> void:
 
 
 func _return_to_idle() -> void:
+	_end_attack_effects()
 	state = State.IDLE
 	_anim.speed_scale = 1.0
 	_player.release_animation()
 
 
 func _on_died(_source: Node) -> void:
+	_end_attack_effects()
 	state = State.DEAD
 	_combo_buffered = false
 	_anim.speed_scale = 1.0
@@ -446,9 +490,13 @@ func _respawn() -> void:
 # --- Helpers -------------------------------------------------------------------
 
 func _clip_time() -> float:
-	if _anim == null or _anim.current_animation != String(CombatKit.CHOP):
-		return CombatKit.CHOP_END
+	if _anim == null or _clip == &"" or _anim.current_animation != String(_clip):
+		return 100.0
 	return _anim.current_animation_position
+
+
+func _blow(key: String) -> float:
+	return float(SabreAttacks.data(_clip)[key])
 
 
 func _facing() -> Vector3:

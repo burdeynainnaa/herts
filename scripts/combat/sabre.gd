@@ -26,11 +26,73 @@ extends MeshInstance3D
 		brass_color = value
 		_rebuild()
 
+## How long a point of the blade trail lingers, in seconds.
+@export var trail_lifetime: float = 0.16
+@export var trail_color: Color = Color(1.0, 0.93, 0.8, 0.32)
+
 var _steel: StandardMaterial3D
+var _trail: MeshInstance3D
+var _trail_mesh: ImmediateMesh
+var _trail_points: Array = []
+var _trailing: bool = false
 
 
 func _ready() -> void:
 	_rebuild()
+	set_process(false)
+
+
+## Starts drawing a fading ribbon behind the blade: the swing's motion arc.
+func start_trail() -> void:
+	if Engine.is_editor_hint():
+		return
+	if _trail == null:
+		_trail_mesh = ImmediateMesh.new()
+		_trail = MeshInstance3D.new()
+		_trail.name = "Trail"
+		_trail.top_level = true
+		_trail.mesh = _trail_mesh
+		_trail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		material.vertex_color_use_as_albedo = true
+		_trail.material_override = material
+		add_child(_trail)
+	_trail.global_transform = Transform3D.IDENTITY
+	_trailing = true
+	set_process(true)
+
+
+func stop_trail() -> void:
+	_trailing = false
+
+
+func _process(delta: float) -> void:
+	for point in _trail_points:
+		point[2] += delta
+	while not _trail_points.is_empty() and _trail_points[0][2] > trail_lifetime:
+		_trail_points.pop_front()
+	if _trailing:
+		_trail_points.append([to_global(Vector3(0.0, 0.45, -blade_curve * 0.2)), tip_global_position(), 0.0])
+	_trail_mesh.clear_surfaces()
+	if _trail_points.size() >= 2:
+		_trail_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+		for point in _trail_points:
+			var fade := 1.0 - float(point[2]) / trail_lifetime
+			var inner := trail_color
+			inner.a *= fade * 0.1
+			var outer := trail_color
+			outer.a *= fade
+			_trail_mesh.surface_set_color(inner)
+			_trail_mesh.surface_add_vertex(point[0])
+			_trail_mesh.surface_set_color(outer)
+			_trail_mesh.surface_add_vertex(point[1])
+		_trail_mesh.surface_end()
+	elif not _trailing:
+		set_process(false)
 
 
 ## Brief bright glint on the steel: the enemy telegraph before a strike.
