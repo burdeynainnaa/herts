@@ -18,20 +18,19 @@ var upper_bones: Array[int] = []
 var lower_bones: Array[int] = []
 var hoof_bones: Array[int] = []
 var mesh_instance: MeshInstance3D
+var separate_tail: bool = false
 
 
-func build_from(source: MeshInstance3D, space: Node3D) -> bool:
-	if source == null or source.mesh == null or source.skin == null:
+func build_from(source: MeshInstance3D, space: Node3D, allow_static: bool = false, trim_ground: bool = false, tail_source: MeshInstance3D = null) -> bool:
+	if source == null or source.mesh == null:
 		return false
-	var source_skeleton := source.get_node_or_null(source.skeleton) as Skeleton3D
-	if source_skeleton == null:
+	var static_mesh: bool = source.skin == null
+	if static_mesh and not allow_static:
 		return false
 	var arrays: Array = source.mesh.surface_get_arrays(0)
 	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var old_bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
-	var old_weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
 	var count: int = vertices.size()
-	if count == 0 or old_bones.size() < count:
+	if count == 0:
 		return false
 	var normals := PackedVector3Array()
 	if arrays[Mesh.ARRAY_NORMAL] is PackedVector3Array:
@@ -39,14 +38,26 @@ func build_from(source: MeshInstance3D, space: Node3D) -> bool:
 	var tangents := PackedFloat32Array()
 	if arrays[Mesh.ARRAY_TANGENT] is PackedFloat32Array:
 		tangents = arrays[Mesh.ARRAY_TANGENT]
-	var per_vertex: int = int(float(old_bones.size()) / float(count))
-	var to_space: Transform3D = space.global_transform.affine_inverse() * source_skeleton.global_transform
+	var old_bones := PackedInt32Array()
+	var old_weights := PackedFloat32Array()
+	var per_vertex: int = 0
+	var to_space: Transform3D = space.global_transform.affine_inverse() * source.global_transform
 	var binds: Array[Transform3D] = []
-	for bind in source.skin.get_bind_count():
-		var source_bone: int = source_skeleton.find_bone(String(source.skin.get_bind_name(bind)))
-		if source_bone < 0:
-			source_bone = source.skin.get_bind_bone(bind)
-		binds.append(to_space * source_skeleton.get_bone_global_rest(source_bone) * source.skin.get_bind_pose(bind))
+	if not static_mesh:
+		var source_skeleton := source.get_node_or_null(source.skeleton) as Skeleton3D
+		if source_skeleton == null:
+			return false
+		old_bones = arrays[Mesh.ARRAY_BONES]
+		old_weights = arrays[Mesh.ARRAY_WEIGHTS]
+		if old_bones.size() < count:
+			return false
+		per_vertex = int(float(old_bones.size()) / float(count))
+		to_space = space.global_transform.affine_inverse() * source_skeleton.global_transform
+		for bind in source.skin.get_bind_count():
+			var source_bone: int = source_skeleton.find_bone(String(source.skin.get_bind_name(bind)))
+			if source_bone < 0:
+				source_bone = source.skin.get_bind_bone(bind)
+			binds.append(to_space * source_skeleton.get_bone_global_rest(source_bone) * source.skin.get_bind_pose(bind))
 
 	var points := PackedVector3Array()
 	points.resize(count)
@@ -60,17 +71,25 @@ func build_from(source: MeshInstance3D, space: Node3D) -> bool:
 		var point := Vector3.ZERO
 		var normal := Vector3.ZERO
 		var tangent := Vector3.ZERO
-		for slot in per_vertex:
-			var weight: float = old_weights[index * per_vertex + slot]
-			if weight <= 0.0:
-				continue
-			var bind_transform: Transform3D = binds[old_bones[index * per_vertex + slot]]
-			point += (bind_transform * vertices[index]) * weight
+		if static_mesh:
+			point = to_space * vertices[index]
 			if has_normals:
-				normal += (bind_transform.basis * normals[index]) * weight
+				normal = to_space.basis * normals[index]
 			if has_tangents:
 				var source_tangent := Vector3(tangents[index * 4], tangents[index * 4 + 1], tangents[index * 4 + 2])
-				tangent += (bind_transform.basis * source_tangent) * weight
+				tangent = to_space.basis * source_tangent
+		else:
+			for slot in per_vertex:
+				var weight: float = old_weights[index * per_vertex + slot]
+				if weight <= 0.0:
+					continue
+				var bind_transform: Transform3D = binds[old_bones[index * per_vertex + slot]]
+				point += (bind_transform * vertices[index]) * weight
+				if has_normals:
+					normal += (bind_transform.basis * normals[index]) * weight
+				if has_tangents:
+					var source_tangent := Vector3(tangents[index * 4], tangents[index * 4 + 1], tangents[index * 4 + 2])
+					tangent += (bind_transform.basis * source_tangent) * weight
 		points[index] = point
 		if has_normals:
 			new_normals[index] = normal.normalized()
@@ -81,7 +100,11 @@ func build_from(source: MeshInstance3D, space: Node3D) -> bool:
 			new_tangents[index * 4 + 2] = tangent.z
 			new_tangents[index * 4 + 3] = tangents[index * 4 + 3]
 
-	_build_skeleton(points)
+	var tail_pivot := TAIL_PIVOT
+	if tail_source != null and tail_source.mesh != null:
+		separate_tail = true
+		tail_pivot = _tail_origin(tail_source, space)
+	_build_skeleton(points, tail_pivot)
 
 	var new_bones := PackedInt32Array()
 	new_bones.resize(count * 4)
@@ -98,9 +121,30 @@ func build_from(source: MeshInstance3D, space: Node3D) -> bool:
 		new_arrays[Mesh.ARRAY_TANGENT] = new_tangents
 	new_arrays[Mesh.ARRAY_BONES] = new_bones
 	new_arrays[Mesh.ARRAY_WEIGHTS] = new_weights
+	if static_mesh and trim_ground:
+		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		var filtered := PackedInt32Array()
+		for index in range(0, indices.size(), 3):
+			var lowest: float = minf(points[indices[index]].y, minf(points[indices[index + 1]].y, points[indices[index + 2]].y))
+			if lowest < 0.0:
+				continue
+			var center: Vector3 = (points[indices[index]] + points[indices[index + 1]] + points[indices[index + 2]]) / 3.0
+			if center.y < 0.22:
+				var near_hoof := false
+				for bone in hoof_bones:
+					var hoof: Vector3 = get_bone_global_rest(bone).origin
+					if absf(center.x - hoof.x) < 0.16 and absf(center.z - hoof.z) < 0.19:
+						near_hoof = true
+						break
+				if not near_hoof:
+					continue
+			filtered.append_array(indices.slice(index, index + 3))
+		new_arrays[Mesh.ARRAY_INDEX] = filtered
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, new_arrays)
 	mesh.surface_set_material(0, source.get_active_material(0))
+	if tail_source != null and tail_source.mesh != null:
+		_add_tail_surface(mesh, tail_source, space)
 
 	var skin := Skin.new()
 	for bone in get_bone_count():
@@ -132,10 +176,62 @@ func set_neck(pitch: float, yaw: float) -> void:
 
 
 func set_tail(pitch: float, yaw: float) -> void:
-	set_bone_pose_rotation(tail_bone, Quaternion.from_euler(Vector3(pitch, yaw, 0.0)))
+	var angles := Vector3(pitch, 0.0, yaw) if separate_tail else Vector3(pitch, yaw, 0.0)
+	set_bone_pose_rotation(tail_bone, Quaternion.from_euler(angles))
 
 
-func _build_skeleton(points: PackedVector3Array) -> void:
+func _tail_origin(source: MeshInstance3D, space: Node3D) -> Vector3:
+	var arrays: Array = source.mesh.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var to_space: Transform3D = space.global_transform.affine_inverse() * source.global_transform
+	var highest: float = -INF
+	for vertex in vertices:
+		highest = maxf(highest, (to_space * vertex).y)
+	var center := Vector3.ZERO
+	var count := 0
+	for vertex in vertices:
+		var point: Vector3 = to_space * vertex
+		if point.y >= highest - 0.04:
+			center += point
+			count += 1
+	return center / float(count) if count > 0 else TAIL_PIVOT
+
+
+func _add_tail_surface(mesh: ArrayMesh, source: MeshInstance3D, space: Node3D) -> void:
+	var arrays: Array = source.mesh.surface_get_arrays(0).duplicate()
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var tangents := PackedFloat32Array()
+	if arrays[Mesh.ARRAY_TANGENT] is PackedFloat32Array:
+		tangents = arrays[Mesh.ARRAY_TANGENT]
+	var to_space: Transform3D = space.global_transform.affine_inverse() * source.global_transform
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	bones.resize(vertices.size() * 4)
+	weights.resize(vertices.size() * 4)
+	for index in vertices.size():
+		vertices[index] = to_space * vertices[index]
+		if normals.size() == vertices.size():
+			normals[index] = (to_space.basis * normals[index]).normalized()
+		if tangents.size() == vertices.size() * 4:
+			var tangent := Vector3(tangents[index * 4], tangents[index * 4 + 1], tangents[index * 4 + 2])
+			tangent = (to_space.basis * tangent).normalized()
+			tangents[index * 4] = tangent.x
+			tangents[index * 4 + 1] = tangent.y
+			tangents[index * 4 + 2] = tangent.z
+		bones[index * 4] = tail_bone
+		weights[index * 4] = 1.0
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	if not tangents.is_empty():
+		arrays[Mesh.ARRAY_TANGENT] = tangents
+	arrays[Mesh.ARRAY_BONES] = bones
+	arrays[Mesh.ARRAY_WEIGHTS] = weights
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, source.get_active_material(0))
+
+
+func _build_skeleton(points: PackedVector3Array, tail_pivot: Vector3) -> void:
 	clear_bones()
 	upper_bones.clear()
 	lower_bones.clear()
@@ -164,7 +260,7 @@ func _build_skeleton(points: PackedVector3Array) -> void:
 	root_bone = _add_bone("Root", -1, Vector3.ZERO)
 	body_bone = _add_bone("Body", root_bone, BODY_PIVOT)
 	neck_bone = _add_bone("Neck", body_bone, NECK_PIVOT)
-	tail_bone = _add_bone("Tail", body_bone, TAIL_PIVOT)
+	tail_bone = _add_bone("Tail", body_bone, tail_pivot)
 	var leg_names: Array[String] = ["FrontLeft", "FrontRight", "HindLeft", "HindRight"]
 	for leg in 4:
 		var fallback := Vector3(-0.17 if leg % 2 == 0 else 0.17, 0.0, -0.38 if leg < 2 else 0.62)

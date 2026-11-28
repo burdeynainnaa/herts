@@ -19,7 +19,7 @@ Summer starter scene remains at `main.tscn` as a reference.
 
 Open this folder as a Summer Engine project and run the project with Play.
 The configured entry point is `scenes/main.tscn`. Use WASD to walk, hold Shift
-to run, Space to jump, and the mouse to look around. Press F near the horse to
+to run, Space to jump, and the mouse to look around. Press F near either horse to
 mount or dismount; use WASD to ride and hold Shift to gallop. Escape releases the mouse;
 click the game to capture it again. Press M to open or close the world map; Escape
 also closes the map. Left mouse swings the sabre (press again during the

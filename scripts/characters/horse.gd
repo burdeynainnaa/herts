@@ -19,6 +19,9 @@ const MAX_SUPPORT_TILT_DEGREES: float = 45.0
 @export var walk_stride_length: float = 1.8
 @export var run_stride_length: float = 3.4
 @export var slope_align_speed: float = 10.0
+@export var rig_static_model: bool = false
+@export var trim_ground_artifacts: bool = false
+@export_range(0.5, 2.0, 0.01) var model_scale: float = 1.0
 
 var mounted: bool = false
 var gait: StringName = &"idle"
@@ -35,6 +38,7 @@ var _visual: Node3D
 
 
 func _ready() -> void:
+	add_to_group(&"rideable_horses")
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity"))
 	floor_snap_length = 0.4
 	_visual = get_node_or_null(^"Visual") as Node3D
@@ -49,7 +53,9 @@ func _ready() -> void:
 	_rig = HorseQuadrupedRig.new()
 	_rig.name = "QuadrupedRig"
 	_visual.add_child(_rig)
-	if _rig.build_from(meshes[0] as MeshInstance3D, self):
+	var tail_source := model.find_child("Tail", true, false) as MeshInstance3D if rig_static_model else null
+	if _rig.build_from(meshes[0] as MeshInstance3D, self, rig_static_model, trim_ground_artifacts, tail_source):
+		_rig.scale = Vector3.ONE * model_scale
 		model.visible = false
 	else:
 		_rig.queue_free()
@@ -151,7 +157,7 @@ func _hoof_offsets() -> Array[Vector3]:
 	var offsets: Array[Vector3] = []
 	for leg in HOOF_LEG_ORDER:
 		var origin: Vector3 = _rig.get_bone_global_rest(_rig.hoof_bones[leg]).origin
-		offsets.append(Vector3(origin.x, 0.0, origin.z))
+		offsets.append(Vector3(origin.x, 0.0, origin.z) * model_scale)
 	return offsets
 
 
@@ -205,8 +211,10 @@ func _update_gait(delta: float, next_gait: StringName) -> void:
 	var neck_pitch: float = 0.07 * sin(2.0 * cycle + 0.6) * _walk_weight - 0.1 * gallop_rock * _run_weight + 0.03 * sin(_idle_time * 0.7) * (1.0 - moving)
 	_rig.set_neck(neck_pitch, idle_look)
 	var tail_swish: float = 0.12 * sin(cycle) * moving + 0.06 * sin(_idle_time * 0.9) * (1.0 - moving)
+	if _rig.separate_tail:
+		tail_swish = 0.25 * sin(cycle) * moving + 0.18 * sin(_idle_time * 0.9) * (1.0 - moving)
 	_rig.set_tail(-0.35 * _run_weight - 0.05 * _walk_weight, tail_swish)
-	saddle_offset = bob
+	saddle_offset = bob * model_scale + (model_scale - 1.0) * HorseQuadrupedRig.BODY_PIVOT.y
 	saddle_pitch = pitch
 	saddle_roll = roll
 

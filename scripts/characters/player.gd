@@ -178,7 +178,6 @@ func _ready() -> void:
 	_spawn_position = global_position
 	_normal_collision_layer = collision_layer
 	_normal_collision_mask = collision_mask
-	_horse = get_node_or_null("../Horse") as CharacterBody3D
 	_combat = get_node_or_null("Combat")
 	floor_snap_length = floor_snap_distance
 	_camera_yaw.top_level = true
@@ -665,11 +664,20 @@ func get_skeleton() -> Skeleton3D:
 
 
 func _toggle_mount() -> void:
-	if not is_instance_valid(_horse):
-		return
 	if _mounted:
-		_dismount()
-	elif global_position.distance_to(_horse.global_position) <= 3.2:
+		if is_instance_valid(_horse):
+			_dismount()
+		return
+	var nearest_distance := 3.2
+	_horse = null
+	for candidate in get_tree().get_nodes_in_group(&"rideable_horses"):
+		if not candidate is CharacterBody3D or candidate.mounted:
+			continue
+		var distance: float = global_position.distance_to(candidate.global_position)
+		if distance <= nearest_distance:
+			nearest_distance = distance
+			_horse = candidate
+	if is_instance_valid(_horse):
 		_mounted = true
 		_horse.mounted = true
 		collision_layer = 0

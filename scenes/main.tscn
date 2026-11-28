@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" uid="uid://cttabhg4grcrd" path="res://scenes/world/world_environment.tscn" id="3_tipki"]
 [ext_resource type="PackedScene" uid="uid://c8o32l4cg3mip" path="res://scenes/world/great_meadow/region.tscn" id="4_85g3d"]
 [ext_resource type="PackedScene" uid="uid://dpqhrehxa4jen" path="res://scenes/characters/horse.tscn" id="5_choun"]
+[ext_resource type="PackedScene" path="res://scenes/characters/cossack_horse.tscn" id="6_cossack_horse"]
 [ext_resource type="PackedScene" path="res://scenes/ui/world_map.tscn" id="12_eb6dy"]
 [ext_resource type="PackedScene" uid="uid://xg50n1okhdig" path="res://scenes/combat/training_encounter.tscn" id="13_combat"]
 [ext_resource type="PackedScene" path="res://scenes/ui/combat_hud.tscn" id="14_hud"]
@@ -22,6 +23,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7.9389396, 12)
 
 [node name="Horse" parent="." unique_id=791522212 instance=ExtResource("5_choun")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.8, 8.238939, 10.2)
+
+[node name="CossackHorse" parent="." instance=ExtResource("6_cossack_horse")]
+position = Vector3(-1.8, 8.238939, 10.2)
 
 [node name="WorldMap" parent="." unique_id=892439608 instance=ExtResource("12_eb6dy")]
 

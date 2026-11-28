@@ -1,0 +1,25 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/characters/horse.gd" id="1_horse"]
+[ext_resource type="PackedScene" path="res://assets/models/cossack_horse_linked/3d_bc3a2645651a410faf385800_1795863139610.glb" id="2_model"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_horse"]
+radius = 0.55
+height = 1.65
+
+[node name="CossackHorse" type="CharacterBody3D"]
+collision_layer = 4
+script = ExtResource("1_horse")
+rig_static_model = true
+model_scale = 1.12
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+position = Vector3(0, 0.825, 0)
+shape = SubResource("CapsuleShape3D_horse")
+
+[node name="Visual" type="Node3D" parent="."]
+
+[node name="Character" parent="Visual" instance=ExtResource("2_model")]
+position = Vector3(0, 0.8, 0)
+rotation = Vector3(0, 3.1415927, 0)
+scale = Vector3(2.1, 2.1, 2.1)
